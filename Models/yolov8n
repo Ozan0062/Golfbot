@@ -1,0 +1,10 @@
+yolov8n.position
+
+machine learning model
+
+
+camera image
+   ↓
+YOLO model
+   ↓
+detect objects

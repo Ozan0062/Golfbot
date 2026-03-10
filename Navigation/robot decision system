@@ -1,0 +1,13 @@
+Responsibilities:
+
+decide where robot should move
+avoid obstacles
+aim at ball
+
+
+
+Example logic:
+
+ball left → turn left
+ball center → drive forward
+ball right → turn right

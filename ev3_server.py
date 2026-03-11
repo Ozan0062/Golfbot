@@ -1,15 +1,31 @@
-"""
-EV3 SERVER
+import socket
 
-This script runs on the EV3 robot.
+HOST = ""
+PORT = 5000
 
-It receives commands from the computer and controls the motors.
-"""
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen()
 
+print("Robot ready")
 
-def start_server():
-    print("EV3 server running and waiting for commands...")
+while True:
 
+    conn, addr = server.accept()
 
-if __name__ == "__main__":
-    start_server()
+    with conn:
+        command = conn.recv(1024).decode()
+
+        print("Received:", command)
+
+        if command == "FORWARD":
+            print("Move forward")
+
+        elif command == "LEFT":
+            print("Turn left")
+
+        elif command == "RIGHT":
+            print("Turn right")
+
+        elif command == "STOP":
+            print("Stop robot")

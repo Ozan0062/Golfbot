@@ -3,3 +3,7 @@ __pycache__/
 .env
 venv/
 .vscode/
+runs/
+datasets/
+*.onnx
+yolo11n.pt

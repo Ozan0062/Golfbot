@@ -19,10 +19,10 @@ TRAINING_CONFIGS = {
 }
 
 #settings
-BASE_MODEL = "yolov11n.pt" 
+BASE_MODEL = "yolo11n.pt"
 BATCH_SIZE = 16
 IMG_SIZE = 640
-PROJECT_DIR = "training/runs"
+PROJECT_DIR = "training_output"
 
 
 
@@ -74,14 +74,14 @@ def train(config_name):
     model.export(format="onnx")
 
   
-    src = Path(PROJECT_DIR) / cfg["name"] / "weights" / "best.onnx"
+    best_pt = Path(model.trainer.save_dir) / "weights" / "best.onnx"
     if config_name == "field":
         dst = Path("models/best_field.onnx")
     else:
         dst = Path("models/best_objects.onnx")
 
     dst.parent.mkdir(exist_ok=True)
-    shutil.copy2(src, dst)
+    shutil.copy2(best_pt, dst)
     print(f"\nDone! Best model copied to: {dst}")
     print(f"Training results saved to: {PROJECT_DIR}/{cfg['name']}/")
 

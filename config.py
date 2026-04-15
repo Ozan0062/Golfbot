@@ -18,7 +18,7 @@ CONFIDENCE_THRESHOLD = 0.5
 CLASS_NAMES = {
     0: "cross",
     1: "egg",
-    2: "orange_ball",
+    2: "ob", #orange ball
     3: "robot",
-    4: "white_ball",
+    4: "wb", #White ball
 }

@@ -41,7 +41,7 @@ def release(cap):
 # Auto-saves 72 pictures (one every 5 seconds) to images-robot/, then exits.
 # Press ESC to quit early.
 if __name__ == "__main__":
-    TOTAL_IMAGES = 72
+    TOTAL_IMAGES = 50
     INTERVAL = 5.0
 
     cap = open_camera()

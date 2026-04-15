@@ -4,6 +4,9 @@
 
 import cv2
 import sys
+import time
+import os
+from datetime import datetime
 sys.path.append(".")
 from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT
 
@@ -35,20 +38,40 @@ def release(cap):
 
 
 # ── Standalone test ─────────────────────────────────
-# Shows live feed. Press ESC to quit, 's' to save a snapshot.
+# Auto-saves 72 pictures (one every 5 seconds) to images-robot/, then exits.
+# Press ESC to quit early.
 if __name__ == "__main__":
-    cap = open_camera()
-    print(f"Camera opened ({CAMERA_WIDTH}x{CAMERA_HEIGHT}). Press ESC to quit, 's' to save snapshot.")
+    TOTAL_IMAGES = 72
+    INTERVAL = 5.0
 
-    while True:
+    cap = open_camera()
+    os.makedirs("images-robot", exist_ok=True)
+    print(f"Camera opened ({CAMERA_WIDTH}x{CAMERA_HEIGHT}). Taking {TOTAL_IMAGES} images every {INTERVAL}s. Press ESC to quit early.")
+
+    # Continue count from existing images
+    existing = [f for f in os.listdir("images-robot") if f.endswith(".jpg") and f[:-4].isdigit()]
+    existing_count = max((int(f[:-4]) for f in existing), default=0)
+    count = existing_count
+    if count:
+        print(f"Resuming from image {count + 1} (taking {TOTAL_IMAGES} more).")
+    last_save = time.time() - INTERVAL  # trigger immediately on first frame
+
+    while count < existing_count + TOTAL_IMAGES:
         frame = grab_frame(cap)
         cv2.imshow("Camera Test", frame)
 
+        now = time.time()
+        if now - last_save >= INTERVAL:
+            count += 1
+            filename = os.path.join("images-robot", f"{count}.jpg")
+            cv2.imwrite(filename, frame)
+            print(f"[{count}/{TOTAL_IMAGES}] Saved {filename}")
+            last_save = now
+
         key = cv2.waitKey(1) & 0xFF
         if key == 27:       # ESC
+            print("Aborted early.")
             break
-        elif key == ord("s"):
-            cv2.imwrite("snapshot.jpg", frame)
-            print("Saved snapshot.jpg")
 
+    print(f"Done. {count} images saved to images-robot/")
     release(cap)

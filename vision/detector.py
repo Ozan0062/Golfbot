@@ -10,7 +10,7 @@ from config import OBJECT_MODEL_PATH, CONFIDENCE_THRESHOLD, CLASS_NAMES
 
 
 def load_object_model(path=OBJECT_MODEL_PATH):
-    """Load the ONNX model that detects balls, egg, cross, robot."""
+    """Load objectONNX model"""
     return YOLO(path, task="detect")
 
 
@@ -49,10 +49,9 @@ def draw_detections(frame, detections):
 
         color = {
             "cross": (0, 0, 255),
-            "egg": (0, 255, 255),
-            "orange_ball": (0, 165, 255),
+            "ob": (0, 165, 255),
             "robot": (255, 0, 0),
-            "white_ball": (255, 255, 255),
+            "wb": (255, 255, 255),
         }.get(det["class_name"], (128, 128, 128))
 
         cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)

@@ -31,16 +31,14 @@ def extract_objects(detections_cm):
     Split detections into named objects for easy access.
     Returns dict: {
         "cross": (x, y) or None,
-        "egg": (x, y) or None,
-        "orange_ball": (x, y) or None,
+        "ob": (x, y) or None,
         "robot": (x, y) or None,
         "white_balls": [(x, y), ...],
     }
     """
     objects = {
         "cross": None,
-        "egg": None,
-        "orange_ball": None,
+        "ob": None,
         "robot": None,
         "white_balls": [],
     }
@@ -49,7 +47,7 @@ def extract_objects(detections_cm):
         name = det["class_name"]
         pos = det["position_cm"]
 
-        if name == "white_ball":
+        if name == "wb":
             objects["white_balls"].append(pos)
         elif name in objects:
             # Keep the highest-confidence detection if duplicates

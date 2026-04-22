@@ -38,40 +38,36 @@ def release(cap):
 
 
 # ── Standalone test ─────────────────────────────────
-# Auto-saves 72 pictures (one every 5 seconds) to images-robot/, then exits.
-# Press ESC to quit early.
+# Press SPACE to capture an image, ESC to quit.
+# Saves to images-robot/, continuing the count from existing images.
 if __name__ == "__main__":
-    TOTAL_IMAGES = 50
-    INTERVAL = 5.0
+    TOTAL_IMAGES = 100
 
     cap = open_camera()
     os.makedirs("images-robot", exist_ok=True)
-    print(f"Camera opened ({CAMERA_WIDTH}x{CAMERA_HEIGHT}). Taking {TOTAL_IMAGES} images every {INTERVAL}s. Press ESC to quit early.")
 
     # Continue count from existing images
     existing = [f for f in os.listdir("images-robot") if f.endswith(".jpg") and f[:-4].isdigit()]
     existing_count = max((int(f[:-4]) for f in existing), default=0)
     count = existing_count
+    target = existing_count + TOTAL_IMAGES
     if count:
-        print(f"Resuming from image {count + 1} (taking {TOTAL_IMAGES} more).")
-    last_save = time.time() - INTERVAL  # trigger immediately on first frame
+        print(f"Resuming from image {count + 1}. {TOTAL_IMAGES} more to go.")
+    print(f"Camera opened ({CAMERA_WIDTH}x{CAMERA_HEIGHT}). Press SPACE to capture, ESC to quit.")
 
-    while count < existing_count + TOTAL_IMAGES:
+    while count < target:
         frame = grab_frame(cap)
         cv2.imshow("Camera Test", frame)
 
-        now = time.time()
-        if now - last_save >= INTERVAL:
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:           # ESC
+            print("Aborted early.")
+            break
+        elif key == ord(" "):   # SPACE
             count += 1
             filename = os.path.join("images-robot", f"{count}.jpg")
             cv2.imwrite(filename, frame)
-            print(f"[{count}/{TOTAL_IMAGES}] Saved {filename}")
-            last_save = now
-
-        key = cv2.waitKey(1) & 0xFF
-        if key == 27:       # ESC
-            print("Aborted early.")
-            break
+            print(f"[{count}/{target}] Saved {filename}")
 
     print(f"Done. {count} images saved to images-robot/")
     release(cap)

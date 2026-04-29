@@ -103,7 +103,7 @@ Adjust these on the real field. If the robot overshoots balls, lower `ARRIVAL_TH
 
 The camera knows **where** the robot is but not **which way it's facing**. The gyro handles this — it tracks rotation from its reset point. At startup the gyro is reset to 0, so the direction the robot faces at launch becomes the 0° reference.
 
-The gyro drifts slightly over many turns. If accuracy degrades during a run, the fix is to reset it at a known orientation (e.g. pointing at the exit wall) before starting.
+The gyro drifts slightly over many turns. for now this will not be calibrated during runtime.
 
 ---
 

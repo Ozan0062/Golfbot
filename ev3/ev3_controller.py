@@ -6,7 +6,7 @@ This module sends commands to the EV3 robot.
 
 import socket
 
-HOST = "192.168.0.10"   # robot IP address
+HOST = "10.65.82.35"    # EV3 IP over USB (ev3dev)
 PORT = 5000
 
 

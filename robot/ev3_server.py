@@ -48,7 +48,8 @@ while True:
             left_motor.stop()
             right_motor.stop()
         elif command == "GET_ANGLE":
-            conn.sendall(str(gyro.value()).encode())
+            angle = gyro.angle()
+            conn.sendall(str(angle).encode())
         elif command == "GET_SPEED":
             gyro.mode = 'GYRO-RATE'
             conn.sendall(str(gyro.value()).encode())

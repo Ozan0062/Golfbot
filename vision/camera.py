@@ -12,15 +12,19 @@ from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT
 
 
 def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
-    """Open camera and return the VideoCapture object."""
-    cap = cv2.VideoCapture(index)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    """Open camera, auto-detecting index if the configured one fails."""
+    for i in ([index] + [x for x in range(5) if x != index]):
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        ret, _ = cap.read()
+        if cap.isOpened() and ret:
+            if i != index:
+                print(f"Camera not found at index {index}, using index {i} instead.")
+            return cap
+        cap.release()
 
-    if not cap.isOpened():
-        raise RuntimeError(f"Could not open camera at index {index}")
-
-    return cap
+    raise RuntimeError("Could not find any working camera (tried indices 0-4)")
 
 
 def grab_frame(cap):

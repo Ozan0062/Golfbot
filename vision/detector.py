@@ -48,11 +48,12 @@ def draw_detections(frame, detections):
         x2, y2 = int(cx + w / 2), int(cy + h / 2)
 
         color = {
-            "cross": (0, 0, 255),
-            "ob": (0, 165, 255),
-            "robot": (255, 0, 0),
-            "wb": (255, 255, 255),
-        }.get(det["class_name"], (128, 128, 128))
+    "cross": (0, 0, 255),
+    "ob": (0, 165, 255),
+    "robot": (255, 0, 0),
+    "arrow": (0, 255, 0),
+    "wb": (255, 255, 255),
+}.get(det["class_name"], (128, 128, 128))
 
         cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
         label = f"{det['class_name']} {det['confidence']:.0%}"

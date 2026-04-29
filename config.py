@@ -16,8 +16,9 @@ CONFIDENCE_THRESHOLD = 0.5
 
 #object id
 CLASS_NAMES = {
-    0: "cross",
-    1: "ob", #orange ball
-    2: "robot",
-    3: "wb", #White ball
+    0: "arrow",
+    1: "cross",
+    2: "ob",
+    3: "robot",
+    4: "wb",
 }

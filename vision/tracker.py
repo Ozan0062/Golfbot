@@ -37,22 +37,25 @@ def extract_objects(detections_cm):
     }
     """
     objects = {
-        "cross": None,
-        "ob": None,
-        "robot": None,
-        "white_balls": [],
-    }
+    "cross": None,
+    "ob": None,
+    "robot": None,
+    "arrow": None,
+    "white_balls": [],
+}
 
-    for det in detections_cm:
-        name = det["class_name"]
-        pos = det["position_cm"]
+for det in detections_cm:
+    name = det["class_name"]
+    pos = det["position_cm"]
 
-        if name == "wb":
-            objects["white_balls"].append(pos)
-        elif name in objects:
-            # Keep the highest-confidence detection if duplicates
-            if objects[name] is None or det["confidence"] > 0:
-                objects[name] = pos
+    if name == "wb":
+        objects["white_balls"].append(pos)
+    elif name == "arrow":
+        # Use arrow as robot position (more precise center)
+        objects["arrow"] = pos
+    elif name in objects:
+        if objects[name] is None or det["confidence"] > 0:
+            objects[name] = pos
 
     return objects
 

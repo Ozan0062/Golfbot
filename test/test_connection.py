@@ -5,7 +5,7 @@ Opens the camera and reads the gyro from the robot.
 
 import cv2
 from vision.camera import open_camera, grab_frame, release
-from ev3 import ev3_controller as robot
+from controller import ev3_controller as robot
 
 
 # Camera

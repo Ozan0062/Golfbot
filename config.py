@@ -10,8 +10,8 @@ FIELD_WIDTH_CM = 180.0
 FIELD_HEIGHT_CM = 120.0
 
 #yolo models
-FIELD_MODEL_PATH = "models/best_field.onnx"
-OBJECT_MODEL_PATH = "models/best_objects.onnx"
+FIELD_MODEL_PATH = "vision/models/best_field.onnx"
+OBJECT_MODEL_PATH = "vision/models/best_objects.onnx"
 CONFIDENCE_THRESHOLD = 0.5
 
 #object id

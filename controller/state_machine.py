@@ -5,7 +5,7 @@ Finds the nearest ball, aligns, drives to it, repeats until none left.
 
 from enum import Enum, auto
 from controller.navigation import angle_to_target, angle_error, nearest_ball, distance
-from ev3 import ev3_controller as robot
+from controller import ev3_controller as robot
 
 ALIGN_THRESHOLD_DEG  = 10   # degrees — close enough to stop turning
 ARRIVAL_THRESHOLD_CM = 15   # cm — close enough to count as collected

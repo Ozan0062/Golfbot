@@ -10,7 +10,7 @@ PC                          EV3 Brick
 main.py                     ev3_server.py
 vision/                       │
 controller/                   │
-ev3/ev3_controller.py ──TCP──►│ motors + gyro
+controller/ev3_controller.py ──TCP──►│ motors + gyro
 ```
 
 ---
@@ -20,7 +20,7 @@ ev3/ev3_controller.py ──TCP──►│ motors + gyro
 **1. Accept the SSH fingerprint** (first connection only)
 
 ```powershell
-.\deploy.bat
+robot\deploy.bat
 # type "yes" when prompted, then enter password: maker
 ```
 
@@ -31,7 +31,7 @@ ev3/ev3_controller.py ──TCP──►│ motors + gyro
 ### Step 1 — Deploy (PowerShell, run once if you changed ev3_server.py)
 
 ```powershell
-.\deploy.bat
+robot\deploy.bat
 ```
 
 Password: `maker`
@@ -82,9 +82,9 @@ python3 ~/ev3_server.py
 ## Adding new robot commands
 
 1. Add the command handler to `robot/ev3_server.py` on the PC
-2. Run `.\deploy.bat` to push it to the brick
+2. Run `robot\deploy.bat` to push it to the brick
 3. Restart the server on the brick: `python3 ~/ev3_server.py`
-4. Add the matching helper to `ev3/ev3_controller.py` on the PC side
+4. Add the matching helper to `controller/ev3_controller.py` on the PC side
 
 ---
 

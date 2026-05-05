@@ -4,7 +4,7 @@
 
 The controller sits between two systems:
 
-- **Input (Vision team):** `tracker.py` → `extract_objects()` gives real-world positions in cm:
+- **Input (Vision team):** `vision/tracker.py` → `extract_objects()` gives real-world positions in cm:
   ```python
   {
       "robot":       (x_cm, y_cm) or None,
@@ -14,7 +14,7 @@ The controller sits between two systems:
   }
   ```
 
-- **Output (Robot team):** `ev3_controller.py` → sends string commands over TCP:
+- **Output (Robot team):** `controller/ev3_controller.py` → sends string commands over TCP:
   `FORWARD`, `LEFT`, `RIGHT`, `STOP`
 
 Your job is to take positions in cm and decide which command to send, every frame.
@@ -72,16 +72,27 @@ def nearest_ball(robot_pos, balls):
 ## File Structure
 
 ```
-golfbot/
-├── controller/
-│   ├── __init__.py
-│   ├── state_machine.py    ← FSM logic
-│   └── navigation.py       ← angle/distance math helpers
-├── ev3/
-│   ├── ev3_controller.py   ← sends commands to robot (robot team)
-│   └── ev3_server.py       ← runs on the EV3 brick (robot team)
-├── vision/                 ← vision team's files
-└── main.py                 ← wires everything together
+Golfbot/
+├── main.py                         ← entry point, wires everything together
+├── config.py                       ← shared constants
+├── robot/
+│   ├── ev3_server.py               ← runs on the EV3 brick (robot team)
+│   └── deploy.bat                  ← deploy robot code to brick
+├── vision/                         ← vision team's files
+│   ├── camera.py
+│   ├── detector.py
+│   ├── field.py
+│   ├── tracker.py
+│   ├── models/                     ← YOLO .onnx models
+│   ├── training/                   ← training scripts
+│   └── data/                       ← training images
+├── controller/                     ← navigation logic (this folder)
+│   ├── state_machine.py            ← FSM logic
+│   ├── navigation.py               ← angle/distance math helpers
+│   ├── ev3_controller.py           ← sends commands to robot over TCP
+│   └── controller_guide.md        ← this file
+└── test/
+    └── test_connection.py          ← sanity check: camera + gyro
 ```
 
 ---
@@ -103,7 +114,7 @@ Adjust these on the real field. If the robot overshoots balls, lower `ARRIVAL_TH
 
 The camera knows **where** the robot is but not **which way it's facing**. The gyro handles this — it tracks rotation from its reset point. At startup the gyro is reset to 0, so the direction the robot faces at launch becomes the 0° reference.
 
-The gyro drifts slightly over many turns. for now this will not be calibrated during runtime.
+The gyro drifts slightly over many turns. For now this will not be calibrated during runtime.
 
 ---
 
@@ -121,12 +132,12 @@ The gyro drifts slightly over many turns. for now this will not be calibrated du
 ## Testing Without the Full System
 
 ```python
-# test_controller.py
+# Run from project root: python -m test.test_connection
 from controller.state_machine import GolfBotController
 from unittest.mock import patch
 
-with patch('ev3.ev3_controller.send_command', side_effect=print), \
-     patch('ev3.ev3_controller.get_angle', return_value=0.0):
+with patch('controller.ev3_controller.send_command', side_effect=print), \
+     patch('controller.ev3_controller.get_angle', return_value=0.0):
 
     ctrl = GolfBotController()
     world = {

@@ -43,6 +43,10 @@ def drive_forward():
     dps = _dps(DRIVE_SPEED_PCT)
     _run(MOTOR_DIR * dps, MOTOR_DIR * dps)
 
+def drive_backward():
+    dps = _dps(DRIVE_SPEED_PCT)
+    _run(-MOTOR_DIR * dps, -MOTOR_DIR * dps)
+
 def turn_left():
     dps = _dps(TURN_SPEED_PCT)
     # both wheels, opposite directions — left wheel back, right wheel forward

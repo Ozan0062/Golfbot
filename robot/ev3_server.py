@@ -5,7 +5,7 @@ import time
 from ev3dev2.motor import MediumMotor, OUTPUT_A, OUTPUT_D
 from ev3dev2.sensor.lego import GyroSensor
 from ev3dev2.sensor import INPUT_2
-from mov_control import drive_forward, turn_left, turn_right, stop
+from mov_control import drive_forward, drive_backward, turn_left, turn_right, stop
 from claw_control import Claw
 from gate_control import Gate
 
@@ -42,6 +42,9 @@ while True:
 
         if command == "FORWARD":
             drive_forward()
+
+        elif command == "BACKWARD":
+            drive_backward()
 
         elif command == "LEFT":
             turn_left()

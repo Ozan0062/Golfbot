@@ -7,6 +7,7 @@ This file is the controller team's end of that contract.
 
 Commands the brick must handle (ev3_server.py):
     FORWARD     — drive straight
+    BACKWARD    — drive straight in reverse
     LEFT        — turn left in place
     RIGHT       — turn right in place
     STOP        — stop all drive motors
@@ -56,6 +57,11 @@ def _send_recv(command: str) -> str:
 def drive():
     """Drive straight forward."""
     _send("FORWARD")
+
+
+def reverse():
+    """Drive straight backward."""
+    _send("BACKWARD")
 
 
 def turn_left():

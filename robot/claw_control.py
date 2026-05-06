@@ -7,7 +7,7 @@ class Claw:
     def __init__(self, motor, port):
         self.motor = motor(port)
 
-    def close_claw(self, speedDPS=20, position=30):
+    def close_claw(self, speedDPS=40, position=-50):
         self.motor.on_to_position(
             speed=SpeedDPS(speedDPS),
             position=position,
@@ -16,16 +16,14 @@ class Claw:
         )
         return True
 
-    def open_claw(self, speedDPS=20, position=0):
-        if self.motor.position >= 30:
-            self.motor.on_to_position(
+    def open_claw(self, speedDPS=40, position=0):
+        self.motor.on_to_position(
                 speed=SpeedDPS(speedDPS),
                 position=position,
                 brake=True,
                 block=True
             )
-            return True
-        return False
+        return True
 
     def reset_claw(self, speedDPS=20):
         self.motor.on(speed=SpeedDPS(speedDPS)) 

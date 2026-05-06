@@ -1,30 +1,36 @@
 """
-state_machine.py — GolfBot MVP controller.
+state_machine.py — GolfBot complete pipeline controller.
 
-Receives world state from the vision team every frame and decides what
-command to send to the robot.
+Pipeline per ball:
+    IDLE → ALIGN_BALL → DRIVE_BALL → COLLECT → ALIGN_GOAL → DRIVE_GOAL → RELEASE → (repeat)
 
 World state format (from vision/tracker.py → extract_objects()):
     {
         "robot":       (x_cm, y_cm) or None,
         "white_balls": [(x_cm, y_cm), ...],
-        "ob":          (x_cm, y_cm) or None,   # orange ball
-        "cross":       (x_cm, y_cm) or None,   # cross/obstacle marker
+        "ob":          (x_cm, y_cm) or None,
+        "robot_angle": float or None,           # from ArUco
     }
 """
 
+import time
 from enum import Enum, auto
 
 import controller.ev3_controller as robot
 from controller.navigation import angle_to_target, angle_error, nearest_ball, distance
+from config import GOAL_POSITION_CM
 
 
 # ---------------------------------------------------------------------------
-# Tuning constants — adjust on the real field
+# Tuning constants
 # ---------------------------------------------------------------------------
 
-ALIGN_THRESHOLD_DEG  = 10   # max heading error before we start driving
-ARRIVAL_THRESHOLD_CM = 15   # distance at which a ball counts as collected
+ALIGN_THRESHOLD_DEG  = 10    # max heading error before driving
+BALL_THRESHOLD_CM    = 12    # how close to ball before collecting
+GOAL_THRESHOLD_CM    = 25    # how close to goal before releasing
+
+POSE_TIMEOUT_S       = 0.5   # how long to trust last known position/angle
+                              # if ArUco is lost for longer than this → stop
 
 
 # ---------------------------------------------------------------------------
@@ -32,10 +38,14 @@ ARRIVAL_THRESHOLD_CM = 15   # distance at which a ball counts as collected
 # ---------------------------------------------------------------------------
 
 class State(Enum):
-    IDLE  = auto()   # pick the next target
-    ALIGN = auto()   # turn to face target
-    DRIVE = auto()   # drive toward target
-    DONE  = auto()   # no balls left
+    IDLE        = auto()   # pick next ball
+    ALIGN_BALL  = auto()   # turn to face ball
+    DRIVE_BALL  = auto()   # drive to ball
+    COLLECT     = auto()   # pick up ball (claw)
+    ALIGN_GOAL  = auto()   # turn to face goal
+    DRIVE_GOAL  = auto()   # drive to goal
+    RELEASE     = auto()   # release ball (gate)
+    DONE        = auto()   # no balls left
 
 
 # ---------------------------------------------------------------------------
@@ -45,99 +55,149 @@ class State(Enum):
 class GolfBotController:
 
     def __init__(self):
-        self.state  = State.IDLE
-        self.target = None
-        robot.reset_angle()
-        print("[FSM] Ready.")
+        self.state         = State.IDLE
+        self.target        = None              # current ball target
+        self.goal          = GOAL_POSITION_CM  # hardcoded: far right, vertically centered
+        self._last_command = None              # suppress duplicate TCP calls
+
+        # Last known good pose — updated every time ArUco sees the marker
+        self._last_pos      = None
+        self._last_angle    = None
+        self._last_seen_t   = 0.0              # timestamp of last valid ArUco detection
+
+        print(f"[FSM] Ready. Goal: {self.goal}")
 
     # --- Public ---------------------------------------------------------------
 
     def update(self, world: dict) -> str:
         """
         Call once per frame with the latest world state from the vision team.
-        Returns the command that was sent (useful for debug overlay in main.py).
+        Returns the command that was sent (used for debug overlay in main.py).
         """
-        robot_pos = world.get("robot")
-        balls     = self._all_balls(world)
+        now = time.time()
+
+        # Update pose cache whenever ArUco gives a valid reading
+        raw_pos   = world.get("robot")
+        raw_angle = world.get("robot_angle")
+
+        if raw_pos is not None and raw_angle is not None:
+            self._last_pos    = raw_pos
+            self._last_angle  = raw_angle
+            self._last_seen_t = now
+
+        # Use cached pose — but only within the timeout window
+        pose_age   = now - self._last_seen_t
+        robot_pos  = self._last_pos   if pose_age < POSE_TIMEOUT_S else None
+        robot_angle = self._last_angle if pose_age < POSE_TIMEOUT_S else None
+
+        balls = self._all_balls(world)
 
         if robot_pos is None:
-            robot.stop()
-            return "STOP"
+            # Marker lost too long — stop and wait
+            return self._send("STOP")
 
         if self.state == State.IDLE:
             return self._idle(robot_pos, balls)
 
-        if self.state == State.ALIGN:
-            return self._align(robot_pos)
+        if self.state == State.ALIGN_BALL:
+            return self._align_to(robot_pos, robot_angle, self.target, next_state=State.DRIVE_BALL)
 
-        if self.state == State.DRIVE:
-            return self._drive(robot_pos)
+        if self.state == State.DRIVE_BALL:
+            return self._drive_to(robot_pos, robot_angle, self.target,
+                                  threshold=BALL_THRESHOLD_CM,
+                                  next_state=State.COLLECT,
+                                  align_back=State.ALIGN_BALL)
+
+        if self.state == State.COLLECT:
+            return self._collect()
+
+        if self.state == State.ALIGN_GOAL:
+            return self._align_to(robot_pos, robot_angle, self.goal, next_state=State.DRIVE_GOAL)
+
+        if self.state == State.DRIVE_GOAL:
+            return self._drive_to(robot_pos, robot_angle, self.goal,
+                                  threshold=GOAL_THRESHOLD_CM,
+                                  next_state=State.RELEASE,
+                                  align_back=State.ALIGN_GOAL)
+
+        if self.state == State.RELEASE:
+            return self._release()
 
         if self.state == State.DONE:
-            robot.stop()
-            return "STOP"
+            return self._send("STOP")
 
-        return "STOP"
+        return self._send("STOP")
 
     # --- State handlers -------------------------------------------------------
 
     def _idle(self, robot_pos, balls) -> str:
-        """Pick the nearest ball and transition to ALIGN."""
         self.target = nearest_ball(robot_pos, balls)
         if self.target is None:
-            print("[FSM] No balls found — done.")
+            print("[FSM] No balls left — done.")
             self._go(State.DONE)
         else:
-            print(f"[FSM] Target: {self.target}")
-            self._go(State.ALIGN)
-        robot.stop()
-        return "STOP"
+            print(f"[FSM] New target: {self.target}")
+            self._go(State.ALIGN_BALL)
+        return self._send("STOP")
 
-    def _align(self, robot_pos) -> str:
-        """Turn in place until we face the target."""
-        current = robot.get_angle()
-        desired = angle_to_target(robot_pos, self.target)
-        error   = angle_error(current, desired)
+    def _align_to(self, robot_pos, robot_angle, target, next_state: State) -> str:
+        if target is None or robot_angle is None:
+            return self._send("STOP")
 
-        print(f"[FSM] Aligning — error: {error:.1f}°")
+        error = angle_error(robot_angle, angle_to_target(robot_pos, target))
+        print(f"[FSM] Aligning → {next_state.name} — error: {error:.1f}°")
 
         if abs(error) <= ALIGN_THRESHOLD_DEG:
-            self._go(State.DRIVE)
-            robot.stop()
-            return "STOP"
+            self._go(next_state)
+            return self._send("STOP")
 
-        if error > 0:
-            robot.turn_right()
-            return "RIGHT"
-        else:
-            robot.turn_left()
-            return "LEFT"
+        return self._send("RIGHT" if error > 0 else "LEFT")
 
-    def _drive(self, robot_pos) -> str:
-        """Drive straight toward the target, re-align if heading drifts."""
-        dist    = distance(robot_pos, self.target)
-        current = robot.get_angle()
-        desired = angle_to_target(robot_pos, self.target)
-        error   = angle_error(current, desired)
+    def _drive_to(self, robot_pos, robot_angle, target, threshold: float,
+                  next_state: State, align_back: State) -> str:
+        if target is None or robot_angle is None:
+            return self._send("STOP")
 
+        dist  = distance(robot_pos, target)
+        error = angle_error(robot_angle, angle_to_target(robot_pos, target))
         print(f"[FSM] Driving — {dist:.1f} cm  heading error: {error:.1f}°")
 
-        if dist <= ARRIVAL_THRESHOLD_CM:
-            print("[FSM] Ball collected.")
-            self.target = None
-            self._go(State.IDLE)
-            robot.stop()
-            return "STOP"
+        if dist <= threshold:
+            self._go(next_state)
+            return self._send("STOP")
 
         if abs(error) > ALIGN_THRESHOLD_DEG * 2:
-            self._go(State.ALIGN)
-            robot.stop()
-            return "STOP"
+            self._go(align_back)
+            return self._send("STOP")
 
-        robot.drive()
-        return "FORWARD"
+        return self._send("FORWARD")
+
+    def _collect(self) -> str:
+        print("[FSM] Collecting ball...")
+        robot.collect()
+        print("[FSM] Ball collected.")
+        self._go(State.ALIGN_GOAL)
+        return "COLLECT"
+
+    def _release(self) -> str:
+        print("[FSM] Releasing ball...")
+        robot.release()
+        print("[FSM] Ball released.")
+        self.target = None
+        self._go(State.IDLE)
+        return "RELEASE"
 
     # --- Helpers --------------------------------------------------------------
+
+    def _send(self, command: str) -> str:
+        """Send command to robot only if it changed since last frame."""
+        if command != self._last_command:
+            if command == "FORWARD":  robot.drive()
+            elif command == "LEFT":   robot.turn_left()
+            elif command == "RIGHT":  robot.turn_right()
+            elif command == "STOP":   robot.stop()
+            self._last_command = command
+        return command
 
     def _go(self, new_state: State):
         print(f"[FSM] {self.state.name} → {new_state.name}")
@@ -145,7 +205,6 @@ class GolfBotController:
 
     @staticmethod
     def _all_balls(world: dict) -> list:
-        """Combine white balls and orange ball into one list."""
         balls = list(world.get("white_balls", []))
         if world.get("ob"):
             balls.append(world["ob"])

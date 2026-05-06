@@ -2,20 +2,24 @@
 import socket
 import threading
 import time
-from ev3dev2.motor import LargeMotor, OUTPUT_B, OUTPUT_C
+from ev3dev2.motor import MediumMotor, OUTPUT_A, OUTPUT_D
 from ev3dev2.sensor.lego import GyroSensor
 from ev3dev2.sensor import INPUT_2
+from mov_control import drive_forward, turn_left, turn_right, stop
+from claw_control import Claw
+from gate_control import Gate
 
 HOST = ""
 PORT = 5000
-DRIVE_SPEED = 30
-TURN_SPEED  = 20
 
-left_motor  = LargeMotor(OUTPUT_B)
-right_motor = LargeMotor(OUTPUT_C)
-gyro        = GyroSensor(INPUT_2)
+gyro = GyroSensor(INPUT_2)
 gyro.mode   = 'GYRO-RATE'   # toggle to reset accumulated angle
 gyro.mode   = 'GYRO-ANG'
+
+# TODO robot team: set correct motor ports for claw and gate
+claw = Claw(MediumMotor, OUTPUT_A)
+gate = Gate(MediumMotor, OUTPUT_D)
+gate.setup()
 
 def print_gyro():
     while True:
@@ -35,26 +39,38 @@ while True:
     with conn:
         command = conn.recv(1024).decode().strip()
         print("Received:", command)
+
         if command == "FORWARD":
-            left_motor.run_forever(speed_sp=left_motor.max_speed * DRIVE_SPEED // 100)
-            right_motor.run_forever(speed_sp=right_motor.max_speed * DRIVE_SPEED // 100)
+            drive_forward()
+
         elif command == "LEFT":
-            left_motor.run_forever(speed_sp=-(left_motor.max_speed * TURN_SPEED // 100))
-            right_motor.run_forever(speed_sp=right_motor.max_speed * TURN_SPEED // 100)
+            turn_left()
+
         elif command == "RIGHT":
-            left_motor.run_forever(speed_sp=left_motor.max_speed * TURN_SPEED // 100)
-            right_motor.run_forever(speed_sp=-(right_motor.max_speed * TURN_SPEED // 100))
+            turn_right()
+
         elif command == "STOP":
-            left_motor.stop()
-            right_motor.stop()
+            stop()
+
         elif command == "GET_ANGLE":
-            angle = gyro.angle()
-            conn.sendall(str(angle).encode())
+            conn.sendall(str(gyro.value()).encode())
+
         elif command == "GET_SPEED":
             gyro.mode = 'GYRO-RATE'
             conn.sendall(str(gyro.value()).encode())
             gyro.mode = 'GYRO-ANG'
-        elif command.startswith("RESET_ANGLE"):
+
+        elif command == "RESET_ANGLE":
             gyro.mode = 'GYRO-RATE'
             gyro.mode = 'GYRO-ANG'
             print("Gyro reset")
+
+        elif command == "COLLECT":
+            claw.collect_ball()
+            conn.sendall(b"OK")   # unblock the PC side
+
+        elif command == "RELEASE":
+            gate.open_gate()
+            time.sleep(1)         # give ball time to roll out
+            gate.close_gate()
+            conn.sendall(b"OK")   # unblock the PC side

@@ -14,10 +14,13 @@ FIELD_MODEL_PATH = "vision/models/best_field.onnx"
 OBJECT_MODEL_PATH = "vision/models/best_objects.onnx"
 CONFIDENCE_THRESHOLD = 0.5
 
-#object id
+#object id (no robot — detected via ArUco marker instead)
 CLASS_NAMES = {
     0: "cross",
-    1: "ob", #orange ball
-    2: "robot",
-    3: "wb", #White ball
+    1: "ob",  #orange ball
+    2: "wb",  #white ball
 }
+
+#ArUco marker
+ARUCO_DICT = "DICT_4X4_50"
+ARUCO_MARKER_ID = 0  # which marker ID is on the robot

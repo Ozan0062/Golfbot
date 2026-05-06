@@ -10,7 +10,7 @@ from config import OBJECT_MODEL_PATH, CONFIDENCE_THRESHOLD, CLASS_NAMES
 
 
 def load_object_model(path=OBJECT_MODEL_PATH):
-    """Load objectONNX model"""
+    """Load object ONNX model"""
     return YOLO(path, task="detect")
 
 
@@ -50,7 +50,6 @@ def draw_detections(frame, detections):
         color = {
             "cross": (0, 0, 255),
             "ob": (0, 165, 255),
-            "robot": (255, 0, 0),
             "wb": (255, 255, 255),
         }.get(det["class_name"], (128, 128, 128))
 
@@ -63,7 +62,6 @@ def draw_detections(frame, detections):
 
 
 # ── Standalone test ─────────────────────────────────
-# Test on a saved image:  python -m vision.detector some_image.jpg
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python -m vision.detector <image_path>")

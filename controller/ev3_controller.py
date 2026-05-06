@@ -1,51 +1,69 @@
 """
-EV3 CONTROLLER
+ev3_controller.py — PC-side interface to the EV3 robot.
 
-This module sends commands to the EV3 robot.
+Sends string commands over TCP to ev3_server.py running on the brick.
+The robot team owns ev3_server.py and the command strings.
+This file is the controller team's end of that contract.
 """
 
 import socket
 
-HOST = "10.65.82.35"    # EV3 IP over USB (ev3dev)
+HOST = "10.65.82.35"   # EV3 IP over USB (ev3dev)
 PORT = 5000
 
 
-def send_command(command):
-    """Send a one-way command to the robot (no response expected)."""
+# ---------------------------------------------------------------------------
+# Low-level transport (don't call these from state_machine.py)
+# ---------------------------------------------------------------------------
+
+def _send(command: str):
+    """Send a fire-and-forget command to the brick."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         s.sendall(command.encode())
 
 
-def send_command_recv(command):
-    """Send a command and return the robot's response as a string."""
+def _send_recv(command: str) -> str:
+    """Send a command and return the brick's response."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         s.sendall(command.encode())
-        response = s.recv(1024).decode()
-    return response
+        return s.recv(1024).decode()
 
 
-# --- Gyro helpers ---
+# ---------------------------------------------------------------------------
+# Movement commands  (robot team fills in ev3_server.py handler for each)
+# ---------------------------------------------------------------------------
 
-def get_angle():
-    """Return the robot's current accumulated gyro angle in degrees."""
-    return float(send_command_recv("GET_ANGLE"))
-
-
-def get_speed():
-    """Return the robot's current angular velocity in deg/s.
-    NOTE: Do not call get_angle() and get_speed() in the same program —
-    reading speed resets the gyro angle to zero.
-    """
-    return float(send_command_recv("GET_SPEED"))
+def drive():
+    """Drive straight forward."""
+    _send("FORWARD")
 
 
-def reset_angle(angle=0):
-    """Reset the gyro angle to a given value (default 0)."""
-    send_command(f"RESET_ANGLE:{angle}")
+def turn_left():
+    """Turn left (counter-clockwise) in place."""
+    _send("LEFT")
 
 
-    # Future implementation:
-    # socket communication
-    # bluetooth communication
+def turn_right():
+    """Turn right (clockwise) in place."""
+    _send("RIGHT")
+
+
+def stop():
+    """Stop all motors."""
+    _send("STOP")
+
+
+# ---------------------------------------------------------------------------
+# Gyro  (robot team owns the sensor; we just read it)
+# ---------------------------------------------------------------------------
+
+def get_angle() -> float:
+    """Return accumulated gyro angle in degrees since last reset."""
+    return float(_send_recv("GET_ANGLE"))
+
+
+def reset_angle():
+    """Reset gyro to 0. Call once at startup before moving."""
+    _send("RESET_ANGLE")

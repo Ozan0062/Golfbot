@@ -25,6 +25,7 @@ class Gate:
             brake=True,
             block=True
         )
+        self.motor.position = 0 # Reset position again
         return True
 
     def close_gate(self, speedDPS=30, position=0):

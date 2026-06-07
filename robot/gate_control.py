@@ -6,12 +6,22 @@ class Gate:
 
     def setup(self):
         self.motor.position = 0
+        print("gate is setup")
         return True
 
     def open_gate(self, speedDPS=30, position=-90):
         self.motor.on_to_position(
             speed=SpeedDPS(speedDPS),
             position=position,
+            brake=True,
+            block=True
+        )
+        return True
+    
+    def gather_ball(self, speedDPS=150, rotations=-1):
+        self.motor.on_for_rotations(
+            speed=SpeedDPS(speedDPS),
+            rotations=rotations,
             brake=True,
             block=True
         )

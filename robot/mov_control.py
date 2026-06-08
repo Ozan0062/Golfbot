@@ -4,7 +4,7 @@ from ev3dev2.motor import MoveTank, SpeedDPS, OUTPUT_A, OUTPUT_D
 # Motor setup
 # ---------------------------------------------------------------------------
 
-tank = MoveTank(OUTPUT_A, OUTPUT_D)
+tank = MoveTank(OUTPUT_D, OUTPUT_A)
 
 # Speed settings as percentage of max
 # LargeMotor max speed = 1050 DPS

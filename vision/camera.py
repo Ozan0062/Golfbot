@@ -69,9 +69,9 @@ if __name__ == "__main__":
             break
         elif key == ord(" "):   # SPACE
             count += 1
-            filename = os.path.join("images-robot", f"{count}.jpg")
+            filename = os.path.join("images-BadLight", f"{count}.jpg")
             cv2.imwrite(filename, frame)
             print(f"[{count}/{target}] Saved {filename}")
 
-    print(f"Done. {count} images saved to images-robot/")
+    print(f"Done. {count} images saved to images-BadLight/")
     release(cap)

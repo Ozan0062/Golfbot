@@ -1,38 +1,45 @@
-from ev3dev2.motor import SpeedDPS
+import time
+from ev3dev2.motor import SpeedDPS, SpeedPercent
+
 
 class Gate:
     def __init__(self, motor, port):
         self.motor = motor(port)
 
     def setup(self):
-        self.motor.position = 0
-        print("gate is setup")
+        self.motor.command = 'reset'
+        time.sleep(0.5)
         return True
 
-    def open_gate(self, speedDPS=30, position=-90):
-        self.motor.on_to_position(
-            speed=SpeedDPS(speedDPS),
-            position=position,
+    def _turn(self, degrees, speed=50):
+        self.motor.stop()
+        start = time.time()
+        while abs(self.motor.speed) > 5:
+            if time.time() - start > 2.0:
+                break
+            time.sleep(0.05)
+
+        self.motor.on_for_degrees(
+            speed=SpeedPercent(speed),
+            degrees=degrees,
             brake=True,
             block=True
         )
-        return True
-    
-    def gather_ball(self, speedDPS=150, rotations=-1):
-        self.motor.on_for_rotations(
-            speed=SpeedDPS(speedDPS),
-            rotations=rotations,
-            brake=True,
-            block=True
-        )
-        self.motor.position = 0 # Reset position again
+
+        start = time.time()
+        while abs(self.motor.speed) > 5:
+            if time.time() - start > 5.0:
+                self.motor.stop()
+                break
+            time.sleep(0.05)
+
         return True
 
-    def close_gate(self, speedDPS=30, position=0):
-        self.motor.on_to_position(
-            speed=SpeedDPS(speedDPS),
-            position=position,
-            brake=True,
-            block=True
-        )
-        return True
+    def rotate(self, rotations, speed=50):
+        return self._turn(rotations * 360, speed)
+
+    def open(self, speed=30):
+        return self._turn(90, speed)
+
+    def close(self, speed=30):
+        return self._turn(-90, speed)

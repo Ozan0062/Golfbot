@@ -59,6 +59,7 @@ def warp_field(frame, corners, output_width=640, output_height=480):
     """
     Perspective-warp the field region to a clean top-down rectangle.
     corners must be sorted: TL, TR, BR, BL.
+    Returns (warped_frame, M) where M is the homography matrix.
     """
     dst = np.array([
         [0, 0],
@@ -69,7 +70,7 @@ def warp_field(frame, corners, output_width=640, output_height=480):
 
     M = cv2.getPerspectiveTransform(corners, dst)
     warped = cv2.warpPerspective(frame, M, (output_width, output_height))
-    return warped
+    return warped, M
 
 
 # ── Standalone test ─────────────────────────────────
@@ -108,7 +109,7 @@ if __name__ == "__main__":
         if key == 27:
             break
         elif key == ord("w") and len(corners) >= 4:
-            warped = warp_field(frame, sort_corners(corners))
+            warped, _ = warp_field(frame, sort_corners(corners))
             cv2.imshow("Warped Field", warped)
             cv2.imwrite("warped_field.jpg", warped)
             print("Saved warped_field.jpg")

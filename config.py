@@ -9,6 +9,9 @@ CAMERA_HEIGHT = 640
 FIELD_WIDTH_CM = 180.0
 FIELD_HEIGHT_CM = 120.0
 
+# Goal position — hardcoded: far right, vertically centered
+GOAL_POSITION_CM = (FIELD_WIDTH_CM, FIELD_HEIGHT_CM / 2)
+
 #yolo models
 FIELD_MODEL_PATH = "vision/models/best_field.onnx"
 OBJECT_MODEL_PATH = "vision/models/best_objects.onnx"

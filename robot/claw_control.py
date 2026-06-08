@@ -1,7 +1,7 @@
 import time
 
 from ev3dev2.motor import SpeedDPS
-from robot.gate_control import Gate
+from gate_control import Gate
 # LargeMotor maximum speed:  1050 deg/s
 # MediumMotor maximum speed: 1560 deg/s
 

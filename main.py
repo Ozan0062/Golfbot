@@ -21,6 +21,10 @@ def main():
         frame   = grab_frame(cap)
         corners = detect_corners(field_model, frame)
         if len(corners) < 4:
+            print("Waiting for field corners... detected:", len(corners))
+            cv2.imshow("GolfBot", frame)
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
             continue
 
         warped, M = warp_field(frame, sort_corners(corners))

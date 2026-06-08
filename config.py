@@ -1,7 +1,7 @@
 #all project constants
 
 #Camera
-CAMERA_INDEX = 1  #1usb,0pccam
+CAMERA_INDEX = 0  #1usb,0pccam
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 640
 

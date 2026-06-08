@@ -13,7 +13,9 @@ from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT
 
 def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
     """Open camera, auto-detecting index if the configured one fails."""
-    for i in ([index] + [x for x in range(5) if x != index]):
+    # Try configured index first, then fall back through the rest of 0-4
+    candidates = [index] + [i for i in range(5) if i != index]
+    for i in candidates:
         cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
@@ -46,12 +48,13 @@ def release(cap):
 # Saves to images-robot/, continuing the count from existing images.
 if __name__ == "__main__":
     TOTAL_IMAGES = 100
+    SAVE_DIR = "images-robot"  # change this to collect into a different folder
 
     cap = open_camera()
-    os.makedirs("images-robot", exist_ok=True)
+    os.makedirs(SAVE_DIR, exist_ok=True)
 
-    # Continue count from existing images
-    existing = [f for f in os.listdir("images-robot") if f.endswith(".jpg") and f[:-4].isdigit()]
+    # Continue numbering from however many images already exist
+    existing = [f for f in os.listdir(SAVE_DIR) if f.endswith(".jpg") and f[:-4].isdigit()]
     existing_count = max((int(f[:-4]) for f in existing), default=0)
     count = existing_count
     target = existing_count + TOTAL_IMAGES
@@ -69,9 +72,9 @@ if __name__ == "__main__":
             break
         elif key == ord(" "):   # SPACE
             count += 1
-            filename = os.path.join("images-BadLight", f"{count}.jpg")
+            filename = os.path.join(SAVE_DIR, f"{count}.jpg")
             cv2.imwrite(filename, frame)
             print(f"[{count}/{target}] Saved {filename}")
 
-    print(f"Done. {count} images saved to images-BadLight/")
+    print(f"Done. {count} images saved to {SAVE_DIR}/")
     release(cap)

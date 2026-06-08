@@ -62,7 +62,8 @@ def extract_objects(detections_cm):
         if name == "wb":
             objects["white_balls"].append(pos)
         elif name in objects:
-            if objects[name] is None or det["confidence"] > 0:
+            # Keep first detection — there should only be one cross/ob on the field
+            if objects[name] is None:
                 objects[name] = pos
 
     return objects

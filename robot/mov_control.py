@@ -49,12 +49,14 @@ def drive_backward():
 
 def turn_left():
     dps = _dps(TURN_SPEED_PCT)
-    # both wheels, opposite directions — left wheel back, right wheel forward
+    # Spin in place: left wheel back, right wheel forward.
+    # Note: MOTOR_DIR is intentionally NOT applied here — a turn reverses
+    # symmetrically so mounting direction cancels out.
     _run(-dps, dps)
 
 def turn_right():
     dps = _dps(TURN_SPEED_PCT)
-    # both wheels, opposite directions — left wheel forward, right wheel back
+    # Spin in place: left wheel forward, right wheel back.
     _run(dps, -dps)
 
 def stop():

@@ -2,12 +2,18 @@
 from robot.claw_control import Claw
 from robot.gate_control import Gate
 from ev3dev2.motor import MediumMotor, OUTPUT_B, OUTPUT_C
-
+import time
 
 gate = Gate(MediumMotor, OUTPUT_C)
 gate.setup()
+print("Gate ready")
+time.sleep(1)
 
 claw = Claw(MediumMotor, OUTPUT_B, gate)
-claw.reset_claw()
-claw.collect_ball()
+print("Claw ready")
+time.sleep(1)
 
+print("Starting collect_ball...")
+time.sleep(1)
+claw.collect_ball()
+print("Done")

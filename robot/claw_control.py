@@ -6,9 +6,9 @@ from robot.gate_control import Gate
 # MediumMotor maximum speed: 1560 deg/s
 
 class Claw:
-    def __init__(self, motor, port, Gate:Gate):
+    def __init__(self, motor, port, gate:Gate):
         self.motor = motor(port)
-        self.gate = Gate
+        self.gate = gate
 
     def close_claw(self, speedDPS=-100, seconds=1):
         self.motor.on_for_seconds(
@@ -22,14 +22,13 @@ class Claw:
     def open_claw(self, speedDPS=100):
         self.motor.on(speed=SpeedDPS(speedDPS))
         self.motor.wait_until('stalled')
-        self.motor.stop(stop_action='hold')
+        self.motor.stop(stop_action='coast')
         return True
 
     def reset_claw(self, speedDPS=100):
-        self.motor.on(speed=SpeedDPS(speedDPS)) 
-        self.motor.wait_until('stalled') 
-        
-        self.motor.stop(stop_action='hold') 
+        self.motor.on(speed=SpeedDPS(speedDPS))
+        self.motor.wait_until('stalled')
+        self.motor.stop(stop_action='coast')
         self.motor.position = 0
         print("Claw is reset")
         return True
@@ -38,8 +37,16 @@ class Claw:
         print("Start collect")
         print("Closing claw")
         self.close_claw()
-        self.gate.gather_ball()
+        time.sleep(0.5)
+        print("Rotating gate")
+        self.gate.rotate(8)
+        time.sleep(0.5)
+        print("Closing claw again")
+        self.close_claw()
+        time.sleep(0.5)
         print("Opening claw")
         self.open_claw()
-        print("Collect done")
+        time.sleep(0.5)
+        print("Resetting claw")
+        self.reset_claw()
         return True

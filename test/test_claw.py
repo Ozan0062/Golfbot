@@ -8,11 +8,15 @@ Deploy and run:
     scp test/test_claw.py robot@10.62.210.35:~/test_claw.py
     ssh robot@10.62.210.35 python3 ~/test_claw.py
 """
-import time
-from ev3dev2.motor import MediumMotor, OUTPUT_A
-from claw_control import Claw
 
-claw = Claw(MediumMotor, OUTPUT_A)
+import time
+from ev3dev2.motor import MediumMotor, OUTPUT_B, OUTPUT_C
+from robot.claw_control import Claw
+from robot.gate_control import Gate
+
+gate = Gate(MediumMotor, OUTPUT_C)
+gate.setup()
+claw = Claw(MediumMotor, OUTPUT_B, gate)
 
 def wait(msg):
     print(msg)
@@ -33,11 +37,6 @@ result = claw.open_claw()
 print("  returned: " + str(result))
 print("  position: " + str(claw.motor.position))
 
-time.sleep(0.5)
-
-wait("Step 3: full collect_ball (close then open)")
-result = claw.collect_ball()
-print("  returned: " + str(result))
-print("  position: " + str(claw.motor.position))
+claw.reset_claw()
 
 print("\n=== Done ===")

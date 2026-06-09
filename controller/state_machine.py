@@ -19,7 +19,8 @@ from config import GOAL_POSITION_CM
 # ---------------------------------------------------------------------------
 
 ALIGN_THRESHOLD_DEG = 10    # max heading error before driving
-BALL_THRESHOLD_CM   = 12    # how close before collecting
+BALL_THRESHOLD_CM   = 10
+# how close before collecting
 GOAL_THRESHOLD_CM   = 25    # how close to goal before releasing
 POSE_TIMEOUT_S      = 0.5   # stop if ArUco lost longer than this
 REVERSE_DURATION_S  = 1.0   # how long to reverse when no balls found

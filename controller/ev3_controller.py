@@ -19,7 +19,7 @@ Commands the brick must handle (ev3_server.py):
 
 import socket
 
-HOST = "10.164.46.35"   # EV3 IP over WiFi
+HOST = "10.233.49.35"   # EV3 IP over WiFi
 PORT = 5000
 
 

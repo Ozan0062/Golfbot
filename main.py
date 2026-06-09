@@ -9,7 +9,6 @@ from controller.state_machine import GolfBotController
 
 
 def main():
-    release(cap)
     print("GolfBot starting...")
 
     field_model    = load_field_model()

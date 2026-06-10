@@ -53,26 +53,30 @@ while True:
         command = conn.recv(1024).decode().strip()
         print("Received:", command)
 
-        if command == "FORWARD":
-            drive_forward()
+        parts = command.split()
+        cmd = parts[0]
+        rotations = float(parts[1])
 
-        elif command == "BACKWARD":
-            drive_backward()
+        if cmd == "FORWARD":
+            drive_forward(rotations)
 
-        elif command == "LEFT":
-            turn_left()
+        elif cmd == "BACKWARD":
+            drive_backward(rotations)
 
-        elif command == "RIGHT":
-            turn_right()
+        elif cmd == "LEFT":
+            turn_left(rotations)
 
-        elif command == "STOP":
+        elif cmd == "RIGHT":
+            turn_right(rotations)
+
+        elif cmd == "STOP":
             stop()
 
-        elif command == "COLLECT":
+        elif cmd == "COLLECT":
             claw.collect_ball()
             conn.sendall(b"OK")
 
-        elif command == "RELEASE":
+        elif cmd == "RELEASE":
             gate.open()
             time.sleep(1)
             gate.close()

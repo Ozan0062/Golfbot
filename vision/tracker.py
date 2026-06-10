@@ -1,6 +1,20 @@
 # vision/tracker.py — convert pixel detections to real-world cm coordinates
 #
 # Run for a full test (camera → field → detect → cm coords): python -m vision.tracker
+# Coordinate system (cm):
+#
+# (0,0) ────── X ──────→ (180,0)
+#   │                        │
+#   │                        │
+#   Y      (90,60)           │
+#   │        center          │
+#   │                        │
+#   ↓                        │
+# (0,120) ──────────── (180,120)
+#
+# Origin = top-left corner of field
+# X increases rightward, Y increases downward
+
 
 import sys
 sys.path.append(".")

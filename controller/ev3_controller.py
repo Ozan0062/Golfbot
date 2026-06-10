@@ -54,24 +54,28 @@ def _send_recv(command: str) -> str:
 # Movement
 # ---------------------------------------------------------------------------
 
-def drive():
+DEFAULT_DRIVE_ROTATIONS = 1.0   # temporary — replace with calibration once tuned
+DEFAULT_TURN_ROTATIONS  = 0.5   # temporary — replace with calibration once tuned
+
+
+def drive(rotations: float = DEFAULT_DRIVE_ROTATIONS):
     """Drive straight forward."""
-    _send("FORWARD")
+    _send(f"FORWARD {rotations}")
 
 
-def reverse():
+def reverse(rotations: float = DEFAULT_DRIVE_ROTATIONS):
     """Drive straight backward."""
-    _send("BACKWARD")
+    _send(f"BACKWARD {rotations}")
 
 
-def turn_left():
+def turn_left(rotations: float = DEFAULT_TURN_ROTATIONS):
     """Turn left (counter-clockwise) in place."""
-    _send("LEFT")
+    _send(f"LEFT {rotations}")
 
 
-def turn_right():
+def turn_right(rotations: float = DEFAULT_TURN_ROTATIONS):
     """Turn right (clockwise) in place."""
-    _send("RIGHT")
+    _send(f"RIGHT {rotations}")
 
 
 def stop():

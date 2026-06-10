@@ -57,27 +57,36 @@ def extract_objects(detections_cm):
     """
     Split YOLO detections into named objects.
     Robot is NOT included here — it comes from ArUco separately.
-    Returns dict: {
-        "cross": (x, y) or None,
-        "ob": (x, y) or None,
-        "white_balls": [(x, y), ...],
-    }
+    Returns dict with both cm and pixel positions:
+        "cross":        (x_cm, y_cm) or None
+        "ob":           (x_cm, y_cm) or None
+        "white_balls":  [(x_cm, y_cm), ...]
+        "ob_px":        (x_px, y_px) or None
+        "white_balls_px": [(x_px, y_px), ...]
     """
     objects = {
-        "cross": None,
-        "ob": None,
-        "white_balls": [],
+        "cross":          None,
+        "ob":             None,
+        "white_balls":    [],
+        "ob_px":          None,
+        "white_balls_px": [],
     }
 
     for det in detections_cm:
         name = det["class_name"]
-        pos = det["position_cm"]
+        pos_cm = det["position_cm"]
+        pos_px = det["center"]          # original pixel coords from YOLO
 
         if name == "wb":
-            objects["white_balls"].append(pos)
+            objects["white_balls"].append(pos_cm)
+            objects["white_balls_px"].append(pos_px)
+        elif name == "ob":
+            if objects["ob"] is None or det["confidence"] > 0:
+                objects["ob"]    = pos_cm
+                objects["ob_px"] = pos_px
         elif name in objects:
             if objects[name] is None or det["confidence"] > 0:
-                objects[name] = pos
+                objects[name] = pos_cm
 
     return objects
 

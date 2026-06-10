@@ -1,15 +1,15 @@
 """
-calibration_tracker.py — exponential moving average trackers for drive calibration.
+calibration_tracker.py — EMA trackers for drive and turn calibration.
 
 Each tracker holds one ratio and updates it with new measurements using EMA.
-State machine owns the tracker instances and passes positions to calibration.py
-to get new measurements, then hands them here.
+State machine owns the tracker instances; it passes measurements here after
+each blocking move.
 
 Alpha = 0.15  (low weight on new samples — smooth but still adapts)
 """
 
 ALPHA = 0.15
-OUTLIER_THRESHOLD = 0.5   # reject if measurement differs by more than 50% from current ratio
+OUTLIER_THRESHOLD = 2   # reject if measurement differs by >50% from current ratio
 
 
 class CalibrationTracker:
@@ -18,7 +18,8 @@ class CalibrationTracker:
 
     def update(self, new_measurement: float) -> float:
         if abs(new_measurement - self.ratio) > self.ratio * OUTLIER_THRESHOLD:
-            return self.ratio   # reject bad sample, keep current estimate
+            print(f"[CAL] Outlier rejected: {new_measurement:.2f} (current {self.ratio:.2f})")
+            return self.ratio
         self.ratio = ALPHA * new_measurement + (1 - ALPHA) * self.ratio
         return self.ratio
 

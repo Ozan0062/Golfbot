@@ -17,6 +17,7 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
         cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)   # minimize internal buffer
         ret, _ = cap.read()
         if cap.isOpened() and ret:
             if i != index:
@@ -28,8 +29,22 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
 
 
 def grab_frame(cap):
-    for _ in range(2): 
-        cap.grab() 
+    """Grab the latest frame, discarding any buffered stale frames."""
+    for _ in range(2):
+        cap.grab()
+    ret, frame = cap.read()
+    if not ret:
+        raise RuntimeError("Failed to grab frame from camera")
+    return frame
+
+
+def flush_frame(cap):
+    """
+    Flush stale frames after a long blocking operation (e.g. EV3 drive/turn).
+    Grabs enough frames to drain the buffer, then returns a fresh one.
+    """
+    for _ in range(10):
+        cap.grab()
     ret, frame = cap.read()
     if not ret:
         raise RuntimeError("Failed to grab frame from camera")

@@ -1,12 +1,31 @@
+import math
 import cv2
+import time
 import numpy as np
-from vision.camera   import open_camera, grab_frame, release
+from vision.camera   import open_camera, grab_frame, flush_frame, release
 from vision.field    import load_field_model, detect_corners, sort_corners, warp_field
 from vision.detector import load_object_model, detect_objects, draw_detections
 from vision.tracker  import pixels_to_cm, extract_objects, robot_px_to_cm
 from vision.aruco    import create_detector, detect_robot, draw_robot
 from controller.state_machine import GolfBotController
 from vision.calibration import load_calibration, undistort
+from config import ROBOT_FILTER_RADIUS_PX
+
+
+def filter_near_robot(detections, robot_center_px, radius=ROBOT_FILTER_RADIUS_PX):
+    """
+    Remove ball detections whose pixel centre is within <radius> px of the
+    robot's ArUco marker.  Avoids false positives caused by the marker itself.
+    """
+    if robot_center_px is None:
+        return detections
+    rx, ry = robot_center_px
+    return [
+        d for d in detections
+        if d["class_name"] not in ("wb", "ob")
+        or math.dist(d["center"], (rx, ry)) > radius
+    ]
+
 
 def main():
     print("GolfBot starting...")
@@ -15,15 +34,17 @@ def main():
     object_model   = load_object_model()
     aruco_detector = create_detector()
     cap            = open_camera()
-    mtx, dist = load_calibration()
+    mtx, dist      = load_calibration()
     controller     = GolfBotController()
-    last_corners = None
+    last_corners   = None
 
     while True:
+        flush_frame(cap)
         frame = grab_frame(cap)
         if mtx is not None:
             frame = undistort(frame, mtx, dist)
 
+        # ── Field corners ────────────────────────────────────────────────────
         corners = detect_corners(field_model, frame)
         if len(corners) >= 4:
             last_corners = sort_corners(corners)
@@ -38,12 +59,7 @@ def main():
         warped, M = warp_field(frame, last_corners)
         h, w      = warped.shape[:2]
 
-        # YOLO — balls, cross
-        detections   = detect_objects(object_model, warped)
-        world        = extract_objects(pixels_to_cm(detections, w, h))
-
-        # ArUco — detect on raw frame (warping distorts the marker),
-        # then project the center point into warped coordinates via M
+        # ── ArUco — detect on raw frame, project centre into warped coords ──
         robot_center_raw, robot_angle = detect_robot(aruco_detector, frame)
         if robot_center_raw is not None:
             pt = cv2.perspectiveTransform(
@@ -53,12 +69,24 @@ def main():
         else:
             robot_center = None
 
-        world["robot"]       = robot_px_to_cm(robot_center, w, h)
-        world["robot_angle"] = robot_angle   # degrees, or None if not seen
+        # ── YOLO — detect objects, filter false hits near robot marker ───────
+        detections = detect_objects(object_model, warped)
+        detections = filter_near_robot(detections, robot_center)
+
+        # ── Convert to cm and build world dict ───────────────────────────────
+        world                = extract_objects(pixels_to_cm(detections, w, h))
+        world["robot"]       = robot_px_to_cm(robot_center, w, h)  # cm
+        world["robot_px"]    = robot_center                         # pixels (for drive calibration)
+        world["robot_angle"] = robot_angle                          # degrees, or None if not seen
 
         command = controller.update(world)
 
-        # Debug overlay
+        # If update() ran a blocking EV3 move, flush stale buffered frames
+        # so the next iteration starts with a fresh camera view.
+        if command in ("FORWARD", "BACKWARD", "TURN", "COLLECT", "RELEASE"):
+            frame = flush_frame(cap)
+
+        # ── Debug overlay ────────────────────────────────────────────────────
         debug = draw_detections(warped, detections)
         debug = draw_robot(debug, robot_center, robot_angle)
         cv2.putText(debug, f"{controller.state.name}  {command}",

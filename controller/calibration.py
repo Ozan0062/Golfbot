@@ -13,6 +13,11 @@ def measure_pixels_per_rotation(start_px, end_px, rotations: float) -> float:
     return math.dist(start_px, end_px) / rotations
 
 
+def measure_cm_per_rotation(start_cm, end_cm, rotations: float) -> float:
+    """CM travelled per rotation from a forward/backward move (world coords in cm)."""
+    return math.dist(start_cm, end_cm) / rotations
+
+
 def measure_degrees_per_rotation(start_heading: float, end_heading: float, rotations: float) -> float:
     """Degrees turned per rotation from a left/right turn."""
     delta = (end_heading - start_heading + 180) % 360 - 180  # shortest path, handles wrap-around

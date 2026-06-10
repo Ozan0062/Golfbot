@@ -6,4 +6,6 @@ venv/
 runs/
 datasets/
 yolo11n.pt
-pytest-cache-files-w101yaal/
+__pycache__/
+.pytest_cache/
+*.pyc

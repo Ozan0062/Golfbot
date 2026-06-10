@@ -17,20 +17,25 @@ def main():
     cap            = open_camera()
     mtx, dist = load_calibration()
     controller     = GolfBotController()
+    last_corners = None
 
     while True:
-        frame   = grab_frame(cap)
+        frame = grab_frame(cap)
         if mtx is not None:
             frame = undistort(frame, mtx, dist)
+
         corners = detect_corners(field_model, frame)
-        if len(corners) < 4:
-            print("Waiting for field corners... detected:", len(corners))
+        if len(corners) >= 4:
+            last_corners = sort_corners(corners)
+
+        if last_corners is None:
+            print("Waiting for field corners...")
             cv2.imshow("GolfBot", frame)
             if cv2.waitKey(1) & 0xFF == 27:
                 break
             continue
 
-        warped, M = warp_field(frame, sort_corners(corners))
+        warped, M = warp_field(frame, last_corners)
         h, w      = warped.shape[:2]
 
         # YOLO — balls, cross

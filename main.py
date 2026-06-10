@@ -6,7 +6,7 @@ from vision.detector import load_object_model, detect_objects, draw_detections
 from vision.tracker  import pixels_to_cm, extract_objects, robot_px_to_cm
 from vision.aruco    import create_detector, detect_robot, draw_robot
 from controller.state_machine import GolfBotController
-
+from vision.calibration import load_calibration, undistort
 
 def main():
     print("GolfBot starting...")
@@ -15,10 +15,13 @@ def main():
     object_model   = load_object_model()
     aruco_detector = create_detector()
     cap            = open_camera()
+    mtx, dist = load_calibration()
     controller     = GolfBotController()
 
     while True:
         frame   = grab_frame(cap)
+        if mtx is not None:
+            frame = undistort(frame, mtx, dist)
         corners = detect_corners(field_model, frame)
         if len(corners) < 4:
             print("Waiting for field corners... detected:", len(corners))

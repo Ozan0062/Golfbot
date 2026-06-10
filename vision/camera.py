@@ -28,7 +28,8 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
 
 
 def grab_frame(cap):
-    """Read a single frame. Returns the frame or raises on failure."""
+    for _ in range(2): 
+        cap.grab() 
     ret, frame = cap.read()
     if not ret:
         raise RuntimeError("Failed to grab frame from camera")

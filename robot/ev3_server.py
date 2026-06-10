@@ -55,19 +55,18 @@ while True:
 
         parts = command.split()
         cmd = parts[0]
-        rotations = float(parts[1])
 
         if cmd == "FORWARD":
-            drive_forward(rotations)
+            drive_forward(float(parts[1]))
 
         elif cmd == "BACKWARD":
-            drive_backward(rotations)
+            drive_backward(float(parts[1]))
 
         elif cmd == "LEFT":
-            turn_left(rotations)
+            turn_left(float(parts[1]))
 
         elif cmd == "RIGHT":
-            turn_right(rotations)
+            turn_right(float(parts[1]))
 
         elif cmd == "STOP":
             stop()

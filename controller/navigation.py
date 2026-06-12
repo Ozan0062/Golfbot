@@ -27,3 +27,25 @@ def nearest_ball(robot_pos, white_balls):
 
 def distance(pos_a, pos_b):
     return math.dist(pos_a, pos_b)
+
+
+def safe_approach_point(target_pos, margin, field_width, field_height):
+    """
+    Return a collection position inside the field safety zone.
+
+    Targets near an edge or corner are moved inward so the robot centre can
+    stop and turn without its body reaching outside the field.
+    """
+    x, y = target_pos
+    return (
+        min(max(x, margin), field_width - margin),
+        min(max(y, margin), field_height - margin),
+    )
+
+
+def cm_to_pixels(pos_cm, image_width, image_height, field_width, field_height):
+    """Convert a field position in cm to warped-image pixel coordinates."""
+    return (
+        pos_cm[0] * image_width / field_width,
+        pos_cm[1] * image_height / field_height,
+    )

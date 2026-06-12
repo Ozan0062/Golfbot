@@ -13,6 +13,11 @@ FIELD_HEIGHT_CM = 120.0
 WARPED_WIDTH  = 640
 WARPED_HEIGHT = 480
 
+# Navigation safety
+# Robot centre must stay this far from field edges while collecting balls.
+# Set this to at least half the robot's widest dimension.
+FIELD_SAFETY_MARGIN_CM = 15.0
+
 # Goal position — hardcoded: far right, vertically centered
 GOAL_POSITION_CM = (FIELD_WIDTH_CM, FIELD_HEIGHT_CM / 2)
 GOAL_POSITION_PX = (WARPED_WIDTH, WARPED_HEIGHT // 2)

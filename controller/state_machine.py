@@ -17,10 +17,25 @@ from enum import Enum, auto
 import controller.ev3_controller as robot
 from controller.calibration_manager import CalibrationManager
 from controller.commands import Command
-from controller.navigation import angle_to_target, angle_error
+from controller.navigation import (
+    angle_to_target,
+    angle_error,
+    cm_to_pixels,
+    safe_approach_point,
+)
 from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager, RouteTarget
-from config import GOAL_POSITION_CM, GOAL_POSITION_PX, DEGREES_PER_ROTATION, PIXELS_PER_ROTATION
+from config import (
+    DEGREES_PER_ROTATION,
+    FIELD_HEIGHT_CM,
+    FIELD_SAFETY_MARGIN_CM,
+    FIELD_WIDTH_CM,
+    GOAL_POSITION_CM,
+    GOAL_POSITION_PX,
+    PIXELS_PER_ROTATION,
+    WARPED_HEIGHT,
+    WARPED_WIDTH,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -111,13 +126,34 @@ class GolfBotController:
 
         target = self._locked_target
 
-        # Recompute distance from current robot position to locked target px.
+        # Keep tracking distance to the locked ball position for diagnostics.
         # The ball hasn't moved; we just use the stored pixel coordinate.
         dist_px = _dist_px(pose.px, target.px)
-        err     = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
+
+        approach_cm = safe_approach_point(
+            target.cm,
+            FIELD_SAFETY_MARGIN_CM,
+            FIELD_WIDTH_CM,
+            FIELD_HEIGHT_CM,
+        )
+        approach_px = cm_to_pixels(
+            approach_cm,
+            WARPED_WIDTH,
+            WARPED_HEIGHT,
+            FIELD_WIDTH_CM,
+            FIELD_HEIGHT_CM,
+        )
+        approach_dist_px = _dist_px(pose.px, approach_px)
+
+        # Navigate to the safe point first. Once there, face the actual ball so
+        # the claw points toward it without driving the robot into the corner.
+        heading_target = approach_cm if approach_dist_px > BALL_THRESHOLD_PX else target.cm
+        target_bearing = angle_to_target(pose.pos, heading_target)
+        err = angle_error(pose.angle, target_bearing)
         print(f"[FSM] SEEK  angle={pose.angle:.1f}°  "
-              f"target_bearing={angle_to_target(pose.pos, target.cm):.1f}°  "
-              f"err={err:.1f}°  dist={dist_px:.0f}px")
+              f"target_bearing={target_bearing:.1f}°  "
+              f"err={err:.1f}°  dist={dist_px:.0f}px  "
+              f"approach_dist={approach_dist_px:.0f}px")
 
         if abs(err) > ALIGN_THRESHOLD_DEG:
             rotations = abs(err) / DEGREES_PER_ROTATION
@@ -128,17 +164,18 @@ class GolfBotController:
             self._pose.invalidate()
             return cmd
 
-        if dist_px > BALL_THRESHOLD_PX:
-            drive_px = min(dist_px - BALL_THRESHOLD_PX, MAX_DRIVE_PX)
+        if approach_dist_px > BALL_THRESHOLD_PX:
+            drive_px = min(approach_dist_px - BALL_THRESHOLD_PX, MAX_DRIVE_PX)
             rotations = drive_px / PIXELS_PER_ROTATION
-            print(f"[FSM] Drive  {drive_px:.0f}px (of {dist_px:.0f}px) → {rotations:.2f} rot")
+            print(f"[FSM] Drive  {drive_px:.0f}px "
+                  f"(of {approach_dist_px:.0f}px) → {rotations:.2f} rot")
             self._cal.record_drive(pose.px, rotations)   # debug only
             robot.drive(rotations)
             self._pose.invalidate()
             return Command.FORWARD
 
         # Close enough — collect, then unlock so the next ball gets a fresh pick
-        print(f"[FSM] Collecting at dist={dist_px:.0f}px")
+        print(f"[FSM] Collecting at safe approach dist={approach_dist_px:.0f}px")
         self._locked_target = None
         self._route.advance()
         robot.collect()

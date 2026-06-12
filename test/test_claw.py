@@ -11,8 +11,8 @@ Deploy and run:
 
 import time
 from ev3dev2.motor import MediumMotor, OUTPUT_B, OUTPUT_C
-from robot.claw_control import Claw
-from robot.gate_control import Gate
+from claw_control import Claw
+from gate_control import Gate
 
 gate = Gate(MediumMotor, OUTPUT_C)
 gate.setup()

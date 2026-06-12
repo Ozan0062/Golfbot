@@ -38,6 +38,7 @@ def main():
     last_corners   = None
 
     while True:
+        print("Running update from main")
         frame = stream.latest()
         if frame is None:
             continue   # thread not ready yet

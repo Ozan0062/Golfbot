@@ -43,7 +43,7 @@ from config import (
 # ---------------------------------------------------------------------------
 
 ALIGN_THRESHOLD_DEG = 5    # degrees — turn if heading error exceeds this
-BALL_THRESHOLD_PX   = 25    # pixels  — collect if closer than this
+BALL_THRESHOLD_PX   = 10    # pixels  — collect if closer than this
 GOAL_THRESHOLD_PX   = 30    # pixels  — release when this close to goal
 REVERSE_ROTATIONS   = 1.5   # motor rotations per reverse manoeuvre
 MAX_DRIVE_PX        = 80    # pixels  — cap each drive step so we re-align mid-journey
@@ -115,6 +115,7 @@ class GolfBotController:
         # whether YOLO still sees the ball — it often disappears when the robot
         # is right on top of it.
         if self._locked_target is None:
+            print("setting target")
             self._locked_target = self._route.get_target(pose.pos, pose.px, world)
 
         if self._locked_target is None:
@@ -175,7 +176,8 @@ class GolfBotController:
             return Command.FORWARD
 
         # Close enough — collect, then unlock so the next ball gets a fresh pick
-        print(f"[FSM] Collecting at safe approach dist={approach_dist_px:.0f}px")
+        print(f"[FSM] Collecting at dist={dist_px:.0f}px")
+        print("Setting target to none")
         self._locked_target = None
         self._route.advance()
         robot.collect()

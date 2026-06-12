@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-from robot.claw_control import Claw
-from robot.gate_control import Gate
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from claw_control import Claw
+from gate_control import Gate
 from ev3dev2.motor import MediumMotor, OUTPUT_B, OUTPUT_C
 import time
 

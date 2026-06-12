@@ -59,12 +59,19 @@ def get_pose(stream, field_model, aruco_detector, undist_maps, last_corners):
         warped, M = warp_field(frame, last_corners)
 
         # Detect ArUco on the raw (undistorted) frame, project into warped space
-        raw_center, angle = detect_robot(aruco_detector, frame)
+        raw_center, raw_angle = detect_robot(aruco_detector, frame)
         if raw_center is not None:
-            pt = cv2.perspectiveTransform(
-                np.array([[raw_center]], dtype=np.float32), M
-            )[0][0]
-            center_px = (float(pt[0]), float(pt[1]))
+            fwd_raw = (
+                raw_center[0] + 50 * math.cos(math.radians(raw_angle)),
+                raw_center[1] + 50 * math.sin(math.radians(raw_angle)),
+            )
+            pts = np.array([[raw_center, fwd_raw]], dtype=np.float32)
+            warped_pts = cv2.perspectiveTransform(pts, M)[0]
+            center_px = (float(warped_pts[0][0]), float(warped_pts[0][1]))
+            angle = math.degrees(math.atan2(
+                warped_pts[1][1] - warped_pts[0][1],
+                warped_pts[1][0] - warped_pts[0][0],
+            ))
             return center_px, angle, last_corners
 
         time.sleep(0.05)

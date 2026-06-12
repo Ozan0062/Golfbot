@@ -28,9 +28,12 @@ from config import GOAL_POSITION_CM, GOAL_POSITION_PX
 # Thresholds
 # ---------------------------------------------------------------------------
 
-ALIGN_THRESHOLD_DEG = 15    # degrees — turn if heading error exceeds this
+ALIGN_THRESHOLD_DEG = 10    # degrees — turn if heading error exceeds this
 MIN_TURN_ROTATIONS  = 0.25  # skip turns smaller than this — prevents oscillation
-COLLECT_RADIUS_PX   = 10    # pixels  — collect if closer than this
+TURN_DAMPING        = 0.6   # only command 60% of the calculated turn — let next cycle correct
+COLLECT_RADIUS_PX   = 15    # pixels  — collect if closer than this
+BLIND_DRIVE_PX      = 25    # pixels  — inside this AND roughly aimed, drive straight
+BLIND_MAX_ERR_DEG   = 60    # degrees — only blind-drive when error is below this
 GOAL_THRESHOLD_PX   = 30    # pixels  — release when this close to goal
 REVERSE_ROTATIONS   = 1.5   # motor rotations per reverse manoeuvre
 MAX_DRIVE_PX        = 80    # pixels  — cap each drive step so we re-align mid-journey
@@ -128,21 +131,34 @@ class GolfBotController:
             self._pose.invalidate()
             return Command.COLLECT
 
-        # ── 4. Rotate until aligned ─────────────────────────────────────
+        # ── 4. Close range — drive straight if roughly aimed ─────────────
+        # Below BLIND_DRIVE_PX the bearing gets noisy.  Only blind-drive
+        # when we're roughly pointed at the target; otherwise fall through
+        # to the normal turn logic (still reliable at this range).
+        if dist_px <= BLIND_DRIVE_PX and abs(err) <= BLIND_MAX_ERR_DEG:
+            drive_px  = dist_px - COLLECT_RADIUS_PX
+            rotations = drive_px / calibration_pixels.ratio
+            print(f"[FSM] Blind-drive  {drive_px:.0f}px → {rotations:.2f}rot  (close + aimed)")
+            self._cal.record_drive(pose.px, rotations)
+            robot.drive(rotations)
+            self._pose.invalidate()
+            return Command.FORWARD
+
+        # ── 5. Rotate until aligned ─────────────────────────────────────
         if abs(err) > ALIGN_THRESHOLD_DEG:
-            rotations = abs(err) / calibration_angle.ratio
+            rotations = abs(err) / calibration_angle.ratio * TURN_DAMPING
             if rotations < MIN_TURN_ROTATIONS:
                 # Deadband — skip tiny turns that cause oscillation
                 pass
             else:
                 cmd = Command.RIGHT if err > 0 else Command.LEFT
-                print(f"[FSM] Turn {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot")
+                print(f"[FSM] Turn {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot (damped)")
                 self._cal.record_turn(pose.angle, rotations)
                 robot.turn(rotations, cmd.name)
                 self._pose.invalidate()
                 return cmd
 
-        # ── 5. Drive forward (capped, re-check next cycle) ─────────────
+        # ── 6. Drive forward (capped, re-check next cycle) ─────────────
         drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
         rotations = drive_px / calibration_pixels.ratio
         print(f"[FSM] Drive  {drive_px:.0f}px → {rotations:.2f}rot")
@@ -183,10 +199,10 @@ class GolfBotController:
         err = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
 
         if abs(err) > ALIGN_THRESHOLD_DEG:
-            rotations = abs(err) / calibration_angle.ratio
+            rotations = abs(err) / calibration_angle.ratio * TURN_DAMPING
             if rotations >= MIN_TURN_ROTATIONS:
                 cmd = Command.RIGHT if err > 0 else Command.LEFT
-                print(f"[FSM] Goal-align {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot")
+                print(f"[FSM] Goal-align {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot (damped)")
                 self._cal.record_turn(pose.angle, rotations)
                 robot.turn(rotations, cmd.name)
                 self._pose.invalidate()

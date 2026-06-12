@@ -1,8 +1,7 @@
 import math
 import cv2
-import time
 import numpy as np
-from vision.camera   import open_camera, grab_frame, flush_frame, release
+from vision.camera   import open_stream
 from vision.field    import load_field_model, detect_corners, sort_corners, warp_field
 from vision.detector import load_object_model, detect_objects, draw_detections
 from vision.tracker  import pixels_to_cm, extract_objects, robot_px_to_cm
@@ -33,14 +32,16 @@ def main():
     field_model    = load_field_model()
     object_model   = load_object_model()
     aruco_detector = create_detector()
-    cap            = open_camera()
+    stream         = open_stream()
     mtx, dist      = load_calibration()
     controller     = GolfBotController()
     last_corners   = None
 
     while True:
-        flush_frame(cap)
-        frame = grab_frame(cap)
+        frame = stream.latest()
+        if frame is None:
+            continue   # thread not ready yet
+
         if mtx is not None:
             frame = undistort(frame, mtx, dist)
 
@@ -75,27 +76,22 @@ def main():
 
         # ── Convert to cm and build world dict ───────────────────────────────
         world                = extract_objects(pixels_to_cm(detections, w, h))
-        world["robot"]       = robot_px_to_cm(robot_center, w, h)  # cm
-        world["robot_px"]    = robot_center                         # pixels (for drive calibration)
-        world["robot_angle"] = robot_angle                          # degrees, or None if not seen
+        world["robot"]       = robot_px_to_cm(robot_center, w, h)
+        world["robot_px"]    = robot_center
+        world["robot_angle"] = robot_angle
 
         command = controller.update(world)
-
-        # If update() ran a blocking EV3 move, flush stale buffered frames
-        # so the next iteration starts with a fresh camera view.
-        if command in ("FORWARD", "BACKWARD", "TURN", "COLLECT", "RELEASE"):
-            frame = flush_frame(cap)
 
         # ── Debug overlay ────────────────────────────────────────────────────
         debug = draw_detections(warped, detections)
         debug = draw_robot(debug, robot_center, robot_angle)
-        cv2.putText(debug, f"{controller.state.name}  {command}",
+        cv2.putText(debug, f"{controller.state.name}  {command.name}",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.imshow("GolfBot", debug)
         if cv2.waitKey(1) & 0xFF == 27:
             break
 
-    release(cap)
+    stream.stop()
 
 
 if __name__ == "__main__":

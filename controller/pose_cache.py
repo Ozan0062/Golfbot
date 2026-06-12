@@ -17,7 +17,7 @@ from typing import Optional
 
 
 POSE_TIMEOUT_S = 0.5   # reject cached pose older than this
-SETTLE_S       = 1  # blackout window after a move (robot coasting time) todo
+SETTLE_S       = 0.2  # blackout window after a move (robot coasting time) todo
 
 
 @dataclass

@@ -28,10 +28,9 @@ from config import GOAL_POSITION_CM, GOAL_POSITION_PX
 # Thresholds
 # ---------------------------------------------------------------------------
 
-ALIGN_THRESHOLD_DEG = 10    # degrees — turn if heading error exceeds this
-MIN_TURN_ROTATIONS  = 0.15  # skip turns smaller than this — below motor's reliable resolution
-BALL_THRESHOLD_PX   = 15    # pixels  — collect if closer than this
-CLOSE_APPROACH_PX   = 60    # pixels  — inside this radius stop turning, just drive straight
+ALIGN_THRESHOLD_DEG = 15    # degrees — turn if heading error exceeds this
+MIN_TURN_ROTATIONS  = 0.25  # skip turns smaller than this — prevents oscillation
+COLLECT_RADIUS_PX   = 10    # pixels  — collect if closer than this
 GOAL_THRESHOLD_PX   = 30    # pixels  — release when this close to goal
 REVERSE_ROTATIONS   = 1.5   # motor rotations per reverse manoeuvre
 MAX_DRIVE_PX        = 80    # pixels  — cap each drive step so we re-align mid-journey
@@ -63,8 +62,8 @@ class GolfBotController:
         self._cal            = CalibrationManager()
         self._reversed       = False
         self._locked_target  = None   # type: RouteTarget | None
-        print(f"[FSM] Ready.  Goal: {GOAL_POSITION_CM}")
-        print(f"[FSM] Calibration init: {calibration_angle.ratio:.2f} deg/rot, {calibration_pixels.ratio:.2f} px/rot")
+        print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
+              f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
 
     def update(self, world: dict) -> Command:
         pose = self._pose.update(world)
@@ -98,12 +97,8 @@ class GolfBotController:
     # -------------------------------------------------------------------------
 
     def _seek(self, pose, world) -> Command:
-        # Acquire target only when we don't have one.
-        # Once locked, keep driving toward the stored position regardless of
-        # whether YOLO still sees the ball — it often disappears when the robot
-        # is right on top of it.
+        # ── 1. Lock target ──────────────────────────────────────────────
         if self._locked_target is None:
-            print("setting target")
             self._locked_target = self._route.get_target(pose.pos, pose.px, world)
 
         if self._locked_target is None:
@@ -115,51 +110,42 @@ class GolfBotController:
 
         target = self._locked_target
 
-        dist_px      = _dist_px(pose.px, target.px)
+        # ── 2. Measure error every cycle (handles drift) ────────────────
+        dist_px        = _dist_px(pose.px, target.px)
         target_bearing = angle_to_target(pose.pos, target.cm)
-        err          = angle_error(pose.angle, target_bearing)
-        print(f"[FSM] SEEK  angle={pose.angle:.1f}°  "
-              f"target_bearing={target_bearing:.1f}°  "
+        err            = angle_error(pose.angle, target_bearing)
+
+        print(f"[SEEK] robot=({pose.px[0]:.0f},{pose.px[1]:.0f})px heading={pose.angle:.1f}°  "
+              f"target=({target.px[0]:.0f},{target.px[1]:.0f})px  "
               f"err={err:.1f}°  dist={dist_px:.0f}px")
 
-        # Collect first — never turn when already on top of the ball
-        if dist_px <= BALL_THRESHOLD_PX:
-            print(f"[FSM] Collecting at dist={dist_px:.0f}px")
+        # ── 3. Close enough → collect ───────────────────────────────────
+        if dist_px <= COLLECT_RADIUS_PX:
+            print(f"[FSM] Collect — dist={dist_px:.0f}px")
             self._locked_target = None
             self._route.advance()
             robot.collect()
             self._pose.invalidate()
             return Command.COLLECT
 
-        # Close approach — stop turning, drive straight.
-        # ArUco jitter at close range (~6cm) swings the bearing 30-45°, so
-        # alignment attempts cause oscillation instead of progress.
-        if dist_px <= CLOSE_APPROACH_PX:
-            drive_px = min(dist_px - BALL_THRESHOLD_PX, MAX_DRIVE_PX)
-            rotations = drive_px / calibration_pixels.ratio
-            print(f"[FSM] Close-drive  {drive_px:.0f}px (of {dist_px:.0f}px, err={err:.1f}°) → {rotations:.2f} rot")
-            self._cal.record_drive(pose.px, rotations)
-            robot.drive(rotations)
-            self._pose.invalidate()
-            return Command.FORWARD
-
-        # Normal approach — align then drive
+        # ── 4. Rotate until aligned ─────────────────────────────────────
         if abs(err) > ALIGN_THRESHOLD_DEG:
             rotations = abs(err) / calibration_angle.ratio
             if rotations < MIN_TURN_ROTATIONS:
-                print(f"[FSM] Turn skipped — {rotations:.2f} rot too small to be reliable")
+                # Deadband — skip tiny turns that cause oscillation
+                pass
             else:
                 cmd = Command.RIGHT if err > 0 else Command.LEFT
-                print(f"[FSM] Turn {cmd.name}  {abs(err):.1f}° → {rotations:.2f} rot  ({calibration_angle.ratio:.2f} deg/rot)")
+                print(f"[FSM] Turn {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot")
                 self._cal.record_turn(pose.angle, rotations)
                 robot.turn(rotations, cmd.name)
                 self._pose.invalidate()
                 return cmd
 
-        drive_px = min(dist_px - BALL_THRESHOLD_PX, MAX_DRIVE_PX)
+        # ── 5. Drive forward (capped, re-check next cycle) ─────────────
+        drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
         rotations = drive_px / calibration_pixels.ratio
-        print(f"[FSM] Drive  {drive_px:.0f}px "
-              f"(of {dist_px:.0f}px) → {rotations:.2f} rot  ({calibration_pixels.ratio:.2f} px/rot)")
+        print(f"[FSM] Drive  {drive_px:.0f}px → {rotations:.2f}rot")
         self._cal.record_drive(pose.px, rotations)
         robot.drive(rotations)
         self._pose.invalidate()
@@ -198,18 +184,19 @@ class GolfBotController:
 
         if abs(err) > ALIGN_THRESHOLD_DEG:
             rotations = abs(err) / calibration_angle.ratio
-            cmd = Command.RIGHT if err > 0 else Command.LEFT
-            print(f"[FSM] Goal-align {cmd.name}  {abs(err):.1f}° → {rotations:.2f} rot  ({calibration_angle.ratio:.2f} deg/rot)")
-            self._cal.record_turn(pose.angle, rotations)
-            robot.turn(rotations, cmd.name)
-            self._pose.invalidate()
-            return cmd
+            if rotations >= MIN_TURN_ROTATIONS:
+                cmd = Command.RIGHT if err > 0 else Command.LEFT
+                print(f"[FSM] Goal-align {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot")
+                self._cal.record_turn(pose.angle, rotations)
+                robot.turn(rotations, cmd.name)
+                self._pose.invalidate()
+                return cmd
 
         dist_px = _dist_px(pose.px, GOAL_POSITION_PX)
         if dist_px > GOAL_THRESHOLD_PX:
             drive_px = min(dist_px - GOAL_THRESHOLD_PX, MAX_DRIVE_PX)
             rotations = drive_px / calibration_pixels.ratio
-            print(f"[FSM] Goal-drive  {drive_px:.0f}px (of {dist_px:.0f}px) → {rotations:.2f} rot  ({calibration_pixels.ratio:.2f} px/rot)")
+            print(f"[FSM] Goal-drive  {drive_px:.0f}px → {rotations:.2f}rot")
             self._cal.record_drive(pose.px, rotations)
             robot.drive(rotations)
             self._pose.invalidate()

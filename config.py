@@ -35,7 +35,7 @@ CLASS_NAMES = {
 }
 
 # Drive/turn calibration initial estimates (tune these to your robot)
-PIXELS_PER_ROTATION  = 80.0  # pixels the robot travels per motor rotation
+PIXELS_PER_ROTATION  = 47.0  # pixels the robot travels per motor rotation (measured)
 DEGREES_PER_ROTATION = 40.0  # degrees the robot turns per motor rotation
 
 # False-detection filter: ignore ball detections within this radius of the robot

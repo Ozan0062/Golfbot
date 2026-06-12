@@ -81,12 +81,14 @@ def extract_objects(detections_cm):
             objects["white_balls"].append(pos_cm)
             objects["white_balls_px"].append(pos_px)
         elif name == "ob":
-            if objects["ob"] is None or det["confidence"] > 0:
-                objects["ob"]    = pos_cm
-                objects["ob_px"] = pos_px
-        elif name in objects:
-            if objects[name] is None or det["confidence"] > 0:
-                objects[name] = pos_cm
+            if objects["ob"] is None or det["confidence"] > (objects.get("_ob_conf") or 0):
+                objects["ob"]       = pos_cm
+                objects["ob_px"]    = pos_px
+                objects["_ob_conf"] = det["confidence"]
+        elif name == "cross":
+            if objects["cross"] is None or det["confidence"] > (objects.get("_cross_conf") or 0):
+                objects["cross"]       = pos_cm
+                objects["_cross_conf"] = det["confidence"]
 
     return objects
 
@@ -116,7 +118,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     sorted_c = sort_corners(corners)
-    warped = warp_field(frame, sorted_c)
+    warped, M = warp_field(frame, sorted_c)
     h, w = warped.shape[:2]
 
     # Step 2: detect objects on warped image (YOLO)

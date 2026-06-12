@@ -20,7 +20,7 @@ Usage:
     cal.consume(pose.px, pose.angle)
 """
 
-from controller.calibration import measure_cm_per_rotation, measure_degrees_per_rotation
+from controller.calibration import measure_pixels_per_rotation, measure_degrees_per_rotation
 from controller.calibration_tracker import calibration_pixels, calibration_angle
 
 
@@ -42,7 +42,7 @@ class CalibrationManager:
             start_px, rotations = self._pending_drive
             self._pending_drive = None
             if rotations > 0:
-                measured = measure_cm_per_rotation(start_px, robot_px, rotations)
+                measured = measure_pixels_per_rotation(start_px, robot_px, rotations)
                 calibration_pixels.update(measured)
                 print(f"[CAL] px/rot → {calibration_pixels.ratio:.2f}")
 

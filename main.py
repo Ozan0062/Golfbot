@@ -7,8 +7,8 @@ from vision.detector import load_object_model, detect_objects, draw_detections
 from vision.tracker  import pixels_to_cm, extract_objects, robot_px_to_cm
 from vision.aruco    import create_detector, detect_robot, draw_robot
 from controller.state_machine import GolfBotController
-from vision.calibration import load_calibration, undistort
-from config import ROBOT_FILTER_RADIUS_PX
+from vision.calibration import load_calibration, build_undistort_maps, remap
+from config import ROBOT_FILTER_RADIUS_PX, CAMERA_WIDTH, CAMERA_HEIGHT
 
 
 def filter_near_robot(detections, robot_center_px, radius=ROBOT_FILTER_RADIUS_PX):
@@ -34,17 +34,22 @@ def main():
     aruco_detector = create_detector()
     stream         = open_stream()
     mtx, dist      = load_calibration()
+    undist_maps    = None
+    if mtx is not None:
+        # Precompute remap tables once — much faster than cv2.undistort per frame
+        undist_maps = build_undistort_maps(mtx, dist, (CAMERA_WIDTH, CAMERA_HEIGHT))
+        print(f"Lens calibration loaded — undistort maps built ({CAMERA_WIDTH}x{CAMERA_HEIGHT})")
     controller     = GolfBotController()
     last_corners   = None
 
     while True:
-        print("Running update from main")
+        # Main loop tick
         frame = stream.latest()
         if frame is None:
             continue   # thread not ready yet
 
-        if mtx is not None:
-            frame = undistort(frame, mtx, dist)
+        if undist_maps is not None:
+            frame = remap(frame, *undist_maps)
 
         # ── Field corners ────────────────────────────────────────────────────
         corners = detect_corners(field_model, frame)
@@ -61,15 +66,25 @@ def main():
         warped, M = warp_field(frame, last_corners)
         h, w      = warped.shape[:2]
 
-        # ── ArUco — detect on raw frame, project centre into warped coords ──
-        robot_center_raw, robot_angle = detect_robot(aruco_detector, frame)
+        # ── ArUco — detect on raw frame, project centre AND heading into warped coords
+        robot_center_raw, robot_angle_raw = detect_robot(aruco_detector, frame)
         if robot_center_raw is not None:
-            pt = cv2.perspectiveTransform(
-                np.array([[robot_center_raw]], dtype=np.float32), M
-            )[0][0]
-            robot_center = (float(pt[0]), float(pt[1]))
+            # Project a second point along the raw heading to transform the angle
+            fwd_raw = (
+                robot_center_raw[0] + 50 * math.cos(math.radians(robot_angle_raw)),
+                robot_center_raw[1] + 50 * math.sin(math.radians(robot_angle_raw)),
+            )
+            pts = np.array([[robot_center_raw, fwd_raw]], dtype=np.float32)
+            warped_pts = cv2.perspectiveTransform(pts, M)[0]
+
+            robot_center = (float(warped_pts[0][0]), float(warped_pts[0][1]))
+            robot_angle  = math.degrees(math.atan2(
+                warped_pts[1][1] - warped_pts[0][1],
+                warped_pts[1][0] - warped_pts[0][0],
+            ))
         else:
             robot_center = None
+            robot_angle  = None
 
         # ── YOLO — detect objects, filter false hits near robot marker ───────
         detections = detect_objects(object_model, warped)

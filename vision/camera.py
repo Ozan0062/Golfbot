@@ -54,9 +54,9 @@ class CameraStream:
                     self._frame = frame
 
     def latest(self):
-        """Return the most recently captured frame, or None if not ready yet."""
+        """Return a copy of the most recently captured frame, or None if not ready yet."""
         with self._lock:
-            return self._frame
+            return self._frame.copy() if self._frame is not None else None
 
     def stop(self):
         """Stop the background thread and release the camera."""

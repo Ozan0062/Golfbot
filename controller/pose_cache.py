@@ -27,6 +27,13 @@ class PoseCache:
         self._pose:       Optional[Pose] = None
         self._last_seen:  float          = 0.0
 
+    def invalidate(self):
+        """
+        Drop the cached pose. Call after any blocking robot move so the state
+        machine waits for a confirmed fresh ArUco detection before deciding.
+        """
+        self._last_seen = 0.0
+
     def update(self, world: dict) -> Optional[Pose]:
         """
         Feed a new world dict.  Returns the best available Pose, or None if

@@ -113,21 +113,25 @@ class GolfBotController:
             cmd = Command.RIGHT if err > 0 else Command.LEFT
             self._cal.record_turn(pose.angle, rotations)
             robot.turn(rotations, cmd.name)
+            self._pose.invalidate()
             return cmd
 
         if target.dist_px > BALL_THRESHOLD_PX:
             rotations = rotations_for_distance(target.dist_px, calibration_pixels.ratio)
             self._cal.record_drive(pose.px, rotations)
             robot.drive(rotations)
+            self._pose.invalidate()
             return Command.FORWARD
 
         self._route.advance()
         robot.collect()
+        self._pose.invalidate()
         return Command.COLLECT
 
     def _reverse_white(self, world) -> Command:
         if not self._reversed:
             robot.reverse(REVERSE_ROTATIONS)
+            self._pose.invalidate()
             self._reversed = True
             return Command.BACKWARD
 
@@ -141,6 +145,7 @@ class GolfBotController:
     def _reverse_orange(self, world) -> Command:
         if not self._reversed:
             robot.reverse(REVERSE_ROTATIONS)
+            self._pose.invalidate()
             self._reversed = True
             return Command.BACKWARD
 
@@ -159,6 +164,7 @@ class GolfBotController:
             cmd = Command.RIGHT if err > 0 else Command.LEFT
             self._cal.record_turn(pose.angle, rotations)
             robot.turn(rotations, cmd.name)
+            self._pose.invalidate()
             return cmd
 
         dist_px = _dist_px(pose.px, GOAL_POSITION_PX)
@@ -166,6 +172,7 @@ class GolfBotController:
             rotations = rotations_for_distance(dist_px, calibration_pixels.ratio)
             self._cal.record_drive(pose.px, rotations)
             robot.drive(rotations)
+            self._pose.invalidate()
             return Command.FORWARD
 
         print("[FSM] At goal — releasing.")

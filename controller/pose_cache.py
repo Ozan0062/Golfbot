@@ -15,16 +15,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-
-# DECISION: 0.5s timeout — if the marker hasn't been seen for half a second,
-# the cached pose is too stale to trust (robot may have drifted).
-POSE_TIMEOUT_S = 0.5
-
-# DECISION: 0.2s settle window after each move. The EV3 reports "done"
-# before the robot fully stops coasting, so ArUco readings taken immediately
-# after a move show the robot mid-slide with a wrong angle. This blackout
-# window ignores all detections until the robot has physically settled.
-SETTLE_S = 0.2
+POSE_TIMEOUT_S = 0.5 # If the ArUco marker hasn't been seen for this long, consider the pose unknown.
+SETTLE_S = 0.2  # After a blocking move, ignore ArUco readings for this long to let the robot settle before trusting the pose again.
 
 
 @dataclass
@@ -43,9 +35,7 @@ class PoseCache:
 
     def invalidate(self):
         """
-        Call after any blocking robot move.  Clears the cached pose and blocks
-        new detections for SETTLE_S so the robot can fully stop before the next
-        ArUco reading is trusted.
+        Call after a blocking move to enforce a settle window.
         """
         self._pose        = None
         self._last_seen   = 0.0

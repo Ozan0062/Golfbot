@@ -1,47 +1,4 @@
-"""
-state_machine.py -- GolfBot decision logic.
-
-STATE FLOW
-----------
-  SEEK  ->  lock onto next ball from TSP route
-    | path obstructed by cross?
-    | yes -> AVOID  ->  drive to waypoint (2x clearance from cross, perpendicular)
-    |                   then back to SEEK (original target still locked)
-    | ball near wall/corner?
-    | yes -> AVOID  ->  drive to staging point (60px back, on approach line)
-    |                   then back to SEEK -> ALIGN is now perpendicular to wall
-    | no
-  ALIGN  ->  turn to face the locked target
-    | heading within 10 deg
-  APPROACH  ->  drive toward target (capped per step)
-    | after each drive step, go back to ALIGN
-    | when within collect radius
-  (collect ball, clear target, back to SEEK)
-
-  WALL/CORNER APPROACH
-  --------------------
-  Wall ball (within 30px of one wall):
-    staging point 60px from ball, perpendicular to wall
-    robot aligns perpendicular, drives straight in, collects
-  Corner ball (within 30px of two walls):
-    staging point 60px from ball, at 45 deg diagonal
-    robot aligns on diagonal, drives straight in, collects
-
-  When SEEK finds no balls:
-  REVERSE_WHITE  ->  back up, re-scan for white or orange
-    | still nothing
-  REVERSE_ORANGE  ->  back up, re-scan for orange only
-    | still nothing (all collected)
-  DRIVE_GOAL  ->  turn + drive to goal zone
-    | arrived
-  RELEASE  ->  open gate
-    |
-  DONE
-
-All movement maths (angles, distances) live in navigation.py.
-All hardware commands live in ev3_controller.py.
-All calibration lives in calibration_manager.py + calibration_tracker.py.
-"""
+"""state_machine.py — FSM for golf bot behavior."""
 
 from enum import Enum, auto
 import math
@@ -70,19 +27,10 @@ GOAL_THRESHOLD_PX = 30      # Close enough to goal to stop driving and release b
 REVERSE_ROTATIONS = 1.5     # How far to reverse when no balls are visible.
 MAX_DRIVE_PX = 80           # Cap on drive distance per cycle to allow for course correction.
 
-# DECISION: The cross minimum distance is the closest the robot's path may
-# pass to the cross without triggering avoidance. The waypoint is placed at
-# 2x this distance so the robot clears the cross with comfortable margin.
 CROSS_CLEARANCE_PX = 30     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
 AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
 
-# DECISION: Balls within WALL_MARGIN_PX of an edge are "wall balls" and need
-# a perpendicular approach so the flat claw can reach without the robot body
-# hitting the wall. Corner balls (near two walls) use a 45 deg diagonal.
-# The robot first drives to a staging point STAGING_DISTANCE_PX behind the
-# ball along the approach line, then the normal ALIGN->APPROACH loop drives
-# straight in at the correct angle.
 WALL_MARGIN_PX = 30         # Ball this close to a wall triggers wall approach.
 STAGING_DISTANCE_PX = 60    # How far back from the ball the staging point is.
 
@@ -111,8 +59,8 @@ class GolfBotController:
         self._route          = RouteManager()
         self._cal            = CalibrationManager()
         self._has_reversed   = False
-        self._locked_target  = None   # type: RouteTarget | None
-        self._avoid_target   = None   # type: tuple
+        self._locked_target  = None   # type RouteTarget None
+        self._avoid_target   = None   # type tuple
         print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
               f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
 
@@ -209,9 +157,8 @@ class GolfBotController:
         return Command.STOP
 
     # --- State: AVOID ---------------------------------------------------------
-    # Turn and drive to the avoidance waypoint (same pattern as DRIVE_GOAL).
-    # When reached, go back to SEEK -- the original _locked_target is preserved,
-    # and SEEK will re-check if the path is now clear.
+    # Drive to the avoid target waypoint. First turn to face it, then drive toward it.
+    # After reaching the waypoint, clear it and return to SEEK to re-check the path from the new position.
 
     def _avoid(self, pose) -> Command:
         wp = self._avoid_target
@@ -232,14 +179,14 @@ class GolfBotController:
 
         # Drive toward waypoint
         dist_px = _distance_px(pose.px, wp)
-        if dist_px > AVOID_ARRIVE_PX:
+        if dist_px > AVOID_ARRIVE_PX: # Close enough?
             drive_px  = min(dist_px - AVOID_ARRIVE_PX, MAX_DRIVE_PX)
             rotations = _px_to_rotations(drive_px)
             print(f"[AVOID] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
             self._execute_drive(pose, rotations)
             return Command.FORWARD
 
-        # Arrived at waypoint -- clear it and re-check path from new position
+        # Arrived at waypoint - clear it and re-check path from new position
         print("[AVOID] Waypoint reached -- returning to SEEK")
         self._avoid_target = None
         self._transition(State.SEEK)

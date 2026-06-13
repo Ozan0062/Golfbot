@@ -1,5 +1,5 @@
 """
-ev3_controller.py — PC-side interface to the EV3 robot.
+ev3_controller.py.
 
 Sends string commands over TCP to ev3_server.py running on the brick.
 

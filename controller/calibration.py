@@ -6,7 +6,7 @@ Called after every movement to refine calibration_tracker.py estimates.
 import math
 
 
-# --- Measurement: call after each move, pass result to calibration_tracker ---
+# call after each move, pass result to calibration_tracker
 
 def measure_pixels_per_rotation(start_px, end_px, rotations: float) -> float:
     """Pixels travelled per rotation from a forward/backward move."""
@@ -20,11 +20,13 @@ def measure_cm_per_rotation(start_cm, end_cm, rotations: float) -> float:
 
 def measure_degrees_per_rotation(start_heading: float, end_heading: float, rotations: float) -> float:
     """Degrees turned per rotation from a left/right turn."""
-    delta = (end_heading - start_heading + 180) % 360 - 180  # shortest path, handles wrap-around
+    delta = (end_heading - start_heading + 180) % 360 - 180  # shortest path
     return abs(delta) / rotations
 
 
-# --- Runtime: convert desired distance/angle into rotations to command -------
+
+
+# Runtime: convert desired distance/angle into rotations to command
 
 def rotations_for_distance(distance_px: float, pixels_per_rotation: float) -> float:
     return distance_px / pixels_per_rotation

@@ -37,11 +37,6 @@ class RouteManager:
     def get_target(self, robot_pos: tuple, robot_px: tuple, world: dict) -> Optional[RouteTarget]:
         """
         Return the next RouteTarget, or None if no balls remain.
-
-        DECISION: White balls are always collected first. Christofides runs
-        only on white balls. The orange ball is returned as the target only
-        after all whites are collected. This guarantees the intended order:
-        whites → orange → goal.
         """
         white_balls, white_balls_px = _gather_white(world)
         orange_cm  = world.get("ob")

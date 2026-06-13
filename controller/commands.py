@@ -1,5 +1,5 @@
 """
-commands.py — Robot command vocabulary.
+commands.py.
 
 Every state in the state machine returns one of these.
 The overlay, logging, and ev3_controller all speak this enum.

@@ -1,162 +1,56 @@
-# GolfBot Controller — Guide
+# Controller Guide
 
-## What is the Controller?
+See the flow diagram for detailed state machine logic.
 
-The controller sits between two systems:
+## Overview
 
-- **Input (Vision team):** `vision/tracker.py` → `extract_objects()` gives real-world positions in cm:
-  ```python
-  {
-      "robot":       (x_cm, y_cm) or None,
-      "white_balls": [(x_cm, y_cm), ...],
-      "ob":          (x_cm, y_cm) or None,
-      "cross":       (x_cm, y_cm) or None,
-  }
-  ```
+The controller receives a `world` dict from the vision pipeline every frame and sends motor commands to the EV3 over TCP. It's a finite state machine with 9 states.
 
-- **Output (Robot team):** `controller/ev3_controller.py` → sends string commands over TCP:
-  `FORWARD`, `LEFT`, `RIGHT`, `STOP`
+## States
 
-Your job is to take positions in cm and decide which command to send, every frame.
+SEEK → AVOID → ALIGN → APPROACH → SEEK (loop per ball)
+REVERSE_WHITE → REVERSE_ORANGE → DRIVE_GOAL → RELEASE → DONE (endgame)
 
----
+## Key decisions in SEEK
 
-## Design: Finite State Machine
+1. Lock a target ball (white first via Christofides TSP, then orange)
+2. Cross blocking the path? → AVOID waypoint (perpendicular dodge)
+3. Ball near a wall? → AVOID to staging point (perpendicular approach)
+4. Ball in a corner? → AVOID to staging point (45° diagonal approach)
+5. Path clear, open field → ALIGN directly
 
-The controller uses three states. The robot is always in exactly one of them.
+## Files
 
-```
-IDLE ──► ALIGN ──► DRIVE
- ▲                   │
- └─── (ball collected)
-```
+| File | Purpose |
+|---|---|
+| `state_machine.py` | FSM logic, all state transitions |
+| `navigation.py` | Math helpers: angles, path clearance, zone classification, staging points |
+| `route_manager.py` | Ball ordering: Christofides on whites, then orange |
+| `ev3_controller.py` | TCP commands to EV3 brick |
+| `calibration_manager.py` | Runtime drive/turn calibration |
+| `calibration_tracker.py` | EMA-based ratio tracking (px/rot, deg/rot) |
+| `pose_cache.py` | Caches robot pose between ArUco detections |
+| `commands.py` | Command enum |
+| `tsp_christofides.py` | 1.5-approx TSP solver |
 
-| State | What the robot does | Transitions to |
-|---|---|---|
-| `IDLE` | Picks the nearest ball as target | `ALIGN` |
-| `ALIGN` | Turns in place until facing the target | `DRIVE` when angle error < 10° |
-| `DRIVE` | Drives forward toward the target | `IDLE` when within 15 cm, back to `ALIGN` if heading drifts |
-| `DONE` | All balls collected, stops | — |
+## World dict
 
----
-
-## Key Algorithms
-
-### Angle to target
-```python
-import math
-
-def angle_to_target(robot_pos, target_pos):
-    dx = target_pos[0] - robot_pos[0]
-    dy = target_pos[1] - robot_pos[1]
-    return math.degrees(math.atan2(dy, dx))
-```
-
-### Shortest turn direction
-```python
-def angle_error(current_angle, desired_angle):
-    """Positive = turn RIGHT, Negative = turn LEFT."""
-    return (desired_angle - current_angle + 180) % 360 - 180
-```
-
-### Nearest ball
-```python
-def nearest_ball(robot_pos, balls):
-    if not balls:
-        return None
-    return min(balls, key=lambda b: math.dist(robot_pos, b))
-```
-
----
-
-## File Structure
-
-```
-Golfbot/
-├── main.py                         ← entry point, wires everything together
-├── config.py                       ← shared constants
-├── robot/
-│   ├── ev3_server.py               ← runs on the EV3 brick (robot team)
-│   └── deploy.bat                  ← deploy robot code to brick
-├── vision/                         ← vision team's files
-│   ├── camera.py
-│   ├── detector.py
-│   ├── field.py
-│   ├── tracker.py
-│   ├── models/                     ← YOLO .onnx models
-│   ├── training/                   ← training scripts
-│   └── data/                       ← training images
-├── controller/                     ← navigation logic (this folder)
-│   ├── state_machine.py            ← FSM logic
-│   ├── navigation.py               ← angle/distance math helpers
-│   ├── ev3_controller.py           ← sends commands to robot over TCP
-│   └── controller_guide.md        ← this file
-└── test/
-    └── test_connection.py          ← sanity check: camera + gyro
-```
-
----
-
-## Tuning Constants
-
-At the top of `state_machine.py`:
+Built each frame by `main.py` from vision pipeline output:
 
 ```python
-ALIGN_THRESHOLD_DEG  = 10   # how precisely to align before driving
-ARRIVAL_THRESHOLD_CM = 15   # how close counts as "collected"
+{
+    "white_balls":    [(x_cm, y_cm), ...],
+    "white_balls_px": [(x_px, y_px), ...],
+    "ob":             (x_cm, y_cm) or None,
+    "ob_px":          (x_px, y_px) or None,
+    "cross":          (x_cm, y_cm) or None,
+    "cross_px":       (x_px, y_px) or None,
+    "robot_pos":      (x_cm, y_cm),
+    "robot_px":       (x_px, y_px),
+    "robot_angle":    float (degrees),
+}
 ```
 
-Adjust these on the real field. If the robot overshoots balls, lower `ARRIVAL_THRESHOLD_CM`. If it wastes time micro-adjusting heading, raise `ALIGN_THRESHOLD_DEG`.
+## Tuning
 
----
-
-## The Orientation Problem
-
-The camera knows **where** the robot is but not **which way it's facing**. The gyro handles this — it tracks rotation from its reset point. At startup the gyro is reset to 0, so the direction the robot faces at launch becomes the 0° reference.
-
-The gyro drifts slightly over many turns. For now this will not be calibrated during runtime.
-
----
-
-## Interface Contract with Other Teams
-
-**Vision team** delivers `extract_objects()` with at minimum:
-- `"robot"` — robot position in cm, or `None`
-- `"white_balls"` — list of white ball positions in cm
-- `"ob"` — orange ball position in cm, or `None`
-
-**Robot team** must handle: `FORWARD`, `LEFT`, `RIGHT`, `STOP` and the gyro commands `GET_ANGLE`, `RESET_ANGLE:<n>`.
-
----
-
-## Testing Without the Full System
-
-```python
-# Run from project root: python -m test.test_connection
-from controller.state_machine import GolfBotController
-from unittest.mock import patch
-
-with patch('controller.ev3_controller.send_command', side_effect=print), \
-     patch('controller.ev3_controller.get_angle', return_value=0.0):
-
-    ctrl = GolfBotController()
-    world = {
-        "robot":       (90.0, 60.0),
-        "white_balls": [(30.0, 30.0), (150.0, 90.0)],
-        "ob":          (10.0, 100.0),
-    }
-    for _ in range(30):
-        ctrl.update(world)
-```
-
----
-
-## Common Pitfalls
-
-**Coordinate system mismatch** — In the warped camera image, y increases downward. Confirm with the vision team which direction y goes, as it flips the sign of all angle calculations.
-
-**Gyro drift** — Drifts over time, especially after many turns. Reset at startup while the robot is stationary and facing a known direction.
-
-**Target lost mid-drive** — A ball may disappear from detections as the robot gets close. The controller holds the last known target position and keeps driving to it, so this is handled automatically.
-
-**TCP flooding** — The camera loop runs fast. The robot only needs a command when something changes, not 30× per second. Consider only sending a command when it differs from the last one sent.
+All thresholds are at the top of `state_machine.py` with comments explaining each one.

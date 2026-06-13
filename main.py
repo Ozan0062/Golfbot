@@ -15,6 +15,7 @@ Main loop:
 import math
 import cv2
 import numpy as np
+import time
 
 from vision.camera   import open_stream
 from vision.field    import load_field_model, detect_corners, sort_corners, warp_field
@@ -40,9 +41,6 @@ def detect_field(field_model, frame, last_corners):
     """
     Detect field corners in the current frame.
     Returns updated corners (or the previous ones if detection fails this frame).
-
-    DECISION: We keep last_corners as a fallback so one bad frame doesn't
-    kill the pipeline. The field doesn't move, so stale corners are fine.
     """
     corners = detect_corners(field_model, frame)
     if len(corners) >= 4:
@@ -54,11 +52,6 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     """
     Detect the ArUco marker on the raw (un-warped) frame, then project
     the robot's centre and heading into warped top-down coordinates.
-
-    DECISION: We detect ArUco on the raw frame (not warped) because the
-    warp can distort the marker enough to break detection. The centre and
-    a forward-pointing reference point are then projected through the
-    homography so all downstream code works in warped-pixel space.
 
     Returns (center_px, angle_deg) or (None, None).
     """
@@ -85,12 +78,7 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
 
 def filter_detections_near_robot(detections, robot_center_px, radius=ROBOT_FILTER_RADIUS_PX):
     """
-    Remove ball detections whose pixel centre is within <radius> px of the
-    robot's ArUco marker.
-
-    DECISION: The YOLO model sometimes detects the ArUco marker or parts
-    of the robot body as a ball. Filtering by proximity to the known
-    robot position eliminates these false positives.
+    Remove ball detections whose pixel centre is within <radius> px of the robot's ArUco marker.
     """
     if robot_center_px is None:
         return detections
@@ -156,9 +144,7 @@ def main():
         last_corners = detect_field(field_model, frame, last_corners)
         if last_corners is None:
             print("Waiting for field corners...")
-            cv2.imshow("GolfBot", frame)
-            if cv2.waitKey(1) & 0xFF == 27:
-                break
+            time.sleep(5) # Avoid spamming
             continue
 
         warped, homography = warp_field(frame, last_corners)

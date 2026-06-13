@@ -31,21 +31,7 @@ def cm_to_pixels(pos_cm, image_width, image_height, field_width, field_height):
 
 
 # --------------------------------------------------------------------------
-# Path planning helpers (not yet wired into the state machine)
-#
-# These functions handle three scenarios:
-#   1. Obstacle avoidance -- check if the path to a target is blocked,
-#      and compute a waypoint to steer around it.
-#   2. Wall approach -- balls near a wall must be approached perpendicular
-#      to the wall so the flat claw collects cleanly.
-#   3. Corner approach -- balls in a corner need a 45 deg diagonal approach.
-#
-# Integration plan:
-#   - route_manager.get_target() will call these before returning a target
-#   - If a staging waypoint is needed (wall/corner), it gets inserted
-#     before the actual ball target
-#   - If the path is blocked, an obstacle waypoint gets inserted
-#   - The state machine's ALIGN->APPROACH loop stays unchanged
+# Path planning helpers
 # --------------------------------------------------------------------------
 
 
@@ -58,11 +44,6 @@ def classify_zone(target_px, wall_margin, field_width, field_height):
     Returns (zone, walls) where:
       zone  -- "open", "wall", or "corner"
       walls -- list of nearby wall names: "top", "bottom", "left", "right"
-
-    DECISION: A ball within wall_margin pixels of an edge is a "wall ball."
-    Within wall_margin of two edges is a "corner ball." The margin should
-    match the robot body radius so the robot can't physically overshoot
-    the field boundary during collection.
     """
     walls = []
     if target_px[0] < wall_margin:
@@ -94,11 +75,6 @@ def wall_approach_angle(walls):
       0 deg = right, 90 deg = down, -90 deg = up, 180 deg = left.
 
     Returns None for open-field balls (no constraint).
-
-    DECISION: The approach angle is the direction the robot faces at the
-    moment of collection -- INTO the wall/corner. This keeps the flat claw
-    parallel to the wall surface so it can reach the ball without the
-    robot body hitting the wall.
     """
     _WALL = {
         "top":    -90.0,
@@ -169,11 +145,6 @@ def path_is_clear(start_px, end_px, obstacles, clearance_px):
     Returns (clear, blocker):
       clear   -- True if nothing is within clearance_px of the path.
       blocker -- the (x, y) of the nearest blocking obstacle, or None.
-
-    DECISION: We check against the line segment (not infinite line) so
-    obstacles behind the robot or past the target don't trigger false
-    positives. The clearance is measured center-to-center; if obstacles
-    have significant physical size, add their radius to clearance_px.
     """
     nearest = None
     nearest_dist = float("inf")
@@ -199,11 +170,6 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
 
     Returns (x, y) waypoint in pixel coordinates, or None if the path
     has zero length.
-
-    DECISION: The waypoint is placed at clearance_px from the path
-    (opposite side from obstacle). Since the obstacle is already within
-    clearance of the path, the total distance from obstacle to waypoint
-    is always >= clearance_px, which is the safety margin we want.
     """
     dx = target_px[0] - robot_px[0]
     dy = target_px[1] - robot_px[1]

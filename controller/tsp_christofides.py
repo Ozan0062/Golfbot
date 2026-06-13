@@ -15,8 +15,6 @@ Algorithm steps:
 
 The return leg (back to start) is dropped — the robot doesn't need to
 return to its starting position after collecting all balls.
-
-Requires: networkx  (pip install networkx --break-system-packages)
 """
 
 import math

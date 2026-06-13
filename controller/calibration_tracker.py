@@ -5,7 +5,7 @@ Each tracker holds one ratio and updates it with new measurements using EMA.
 State machine owns the tracker instances; it passes measurements here after
 each blocking move.
 
-Alpha = 0.15  (low weight on new samples — smooth but still adapts)
+Alpha = 0.15
 """
 
 ALPHA = 0.15
@@ -20,7 +20,7 @@ class CalibrationTracker:
         return self.ratio
 
 
-# One instance per motion type — import these into state_machine.py
+# One instance per motion type, shared across the state machine and calibration manager.
 from config import PIXELS_PER_ROTATION, DEGREES_PER_ROTATION
 
 calibration_pixels = CalibrationTracker(PIXELS_PER_ROTATION)

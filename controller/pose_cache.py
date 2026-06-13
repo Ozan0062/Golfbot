@@ -16,8 +16,15 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-POSE_TIMEOUT_S = 0.5   # reject cached pose older than this
-SETTLE_S       = 0.2  # blackout window after a move (robot coasting time) todo
+# DECISION: 0.5s timeout — if the marker hasn't been seen for half a second,
+# the cached pose is too stale to trust (robot may have drifted).
+POSE_TIMEOUT_S = 0.5
+
+# DECISION: 0.2s settle window after each move. The EV3 reports "done"
+# before the robot fully stops coasting, so ArUco readings taken immediately
+# after a move show the robot mid-slide with a wrong angle. This blackout
+# window ignores all detections until the robot has physically settled.
+SETTLE_S = 0.2
 
 
 @dataclass

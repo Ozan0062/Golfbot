@@ -1,14 +1,13 @@
 """
 route_manager.py — TSP route state for ball collection.
 
-Owns:
-  • gathering visible balls from the world dict
-  • deciding when to (re)compute the Christofides route
-  • looking up the current pixel position of the next target each frame
-  • advancing or clearing the route
+COLLECTION ORDER (enforced):
+  1. All white balls first (Christofides-optimized order)
+  2. Orange ball last (only targeted after all whites are collected)
+  3. Then the state machine transitions to DRIVE_GOAL
 
-The state machine calls get_target() each frame and advance() after a collect.
-It never touches _ball_route directly.
+The state machine calls get_target() once per SEEK entry and advance()
+after each collect. It never touches _route directly.
 """
 
 import math
@@ -28,8 +27,8 @@ class RouteTarget:
 class RouteManager:
 
     def __init__(self):
-        self._route:       list = []   # ordered cm positions
-        self._ball_count:  int  = 0    # #balls when route was last computed
+        self._route:       list = []   # ordered cm positions (white balls only)
+        self._white_count: int  = 0    # white balls when route was last computed
 
     # -------------------------------------------------------------------------
     # Public API
@@ -37,52 +36,64 @@ class RouteManager:
 
     def get_target(self, robot_pos: tuple, robot_px: tuple, world: dict) -> Optional[RouteTarget]:
         """
-        Return the next RouteTarget, or None if no balls are visible.
+        Return the next RouteTarget, or None if no balls remain.
 
-        Recomputes the route when new balls appear that weren't in the plan.
-        Px positions are refreshed from the current frame every call.
+        DECISION: White balls are always collected first. Christofides runs
+        only on white balls. The orange ball is returned as the target only
+        after all whites are collected. This guarantees the intended order:
+        whites → orange → goal.
         """
-        all_balls, all_balls_px = _gather_balls(world)
+        white_balls, white_balls_px = _gather_white(world)
+        orange_cm  = world.get("ob")
+        orange_px  = world.get("ob_px")
 
-        if not all_balls:
-            return None
+        # ── Phase 1: white balls ─────────────────────────────────────────
+        if white_balls:
+            if not self._route or len(white_balls) > self._white_count:
+                self._compute_white_route(robot_pos, white_balls)
 
-        if not self._route or len(all_balls) > self._ball_count:
-            self._compute(robot_pos, all_balls)
+            target_cm = self._route[0]
+            target_px = _nearest_px(target_cm, white_balls, white_balls_px)
+            dist_px   = _dist(robot_px, target_px) if robot_px and target_px else 0.0
+            return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
-        target_cm = self._route[0]
-        target_px = _nearest_px(target_cm, all_balls, all_balls_px)
-        dist_px   = _dist(robot_px, target_px) if robot_px and target_px else 0.0
+        # ── Phase 2: orange ball (all whites collected) ──────────────────
+        if orange_cm is not None and orange_px is not None:
+            dist_px = _dist(robot_px, orange_px) if robot_px else 0.0
+            print("[ROUTE] All whites collected — targeting orange ball")
+            return RouteTarget(cm=orange_cm, px=orange_px, dist_px=dist_px)
 
-        return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
+        # Nothing left
+        return None
 
     def advance(self):
         """Call after a successful collect to move to the next target."""
         if self._route:
             self._route.pop(0)
         remaining = len(self._route)
-        print(f"[ROUTE] Advanced.  {remaining} target(s) remaining.")
+        print(f"[ROUTE] Advanced.  {remaining} white target(s) remaining.")
 
     def clear(self):
         """Call when no balls are visible so the route is rebuilt fresh next time."""
-        self._route      = []
-        self._ball_count = 0
+        self._route       = []
+        self._white_count = 0
 
     # -------------------------------------------------------------------------
     # Internal
     # -------------------------------------------------------------------------
 
-    def _compute(self, robot_pos: tuple, all_balls: list):
-        points = [robot_pos] + all_balls          # index 0 = robot
+    def _compute_white_route(self, robot_pos: tuple, white_balls: list):
+        """Run Christofides on white balls only. Orange is handled separately."""
+        points = [robot_pos] + white_balls     # index 0 = robot
         order  = christofides_route(points)
 
         self._route = [
-            all_balls[i - 1]
+            white_balls[i - 1]
             for i in order
-            if i != 0 and 1 <= i <= len(all_balls)
+            if i != 0 and 1 <= i <= len(white_balls)
         ]
-        self._ball_count = len(all_balls)
-        print(f"[ROUTE] Christofides over {len(all_balls)} ball(s) → "
+        self._white_count = len(white_balls)
+        print(f"[ROUTE] Christofides over {len(white_balls)} white ball(s) → "
               f"order {[i for i in order if i != 0]}")
 
 
@@ -90,20 +101,12 @@ class RouteManager:
 # Module helpers
 # ---------------------------------------------------------------------------
 
-def _gather_balls(world: dict) -> tuple:
-    """Return (all_balls_cm, all_balls_px) from the world dict."""
-    white    = world.get("white_balls", [])
-    white_px = world.get("white_balls_px", [])
-    orange   = world.get("ob")
-    orange_px = world.get("ob_px")
-
-    balls    = list(white)
-    balls_px = list(white_px)
-    if orange:
-        balls.append(orange)
-        balls_px.append(orange_px)
-
-    return balls, balls_px
+def _gather_white(world: dict) -> tuple:
+    """Return (white_balls_cm, white_balls_px) from the world dict."""
+    return (
+        world.get("white_balls", []),
+        world.get("white_balls_px", []),
+    )
 
 
 def _nearest_px(target_cm: tuple, all_balls: list, all_balls_px: list) -> Optional[tuple]:

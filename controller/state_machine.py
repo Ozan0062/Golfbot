@@ -1,29 +1,42 @@
 """
-state_machine.py — GolfBot MVP controller.
+state_machine.py — GolfBot decision logic.
 
-Pipeline:
-    FIND_BALL → ALIGN_BALL → DRIVE_BALL → COLLECT → (repeat until no balls)
-    → REVERSE 1s → FIND_BALL → (still none?) → ALIGN_GOAL → DRIVE_GOAL → RELEASE → DONE
+This file contains only state transitions and decisions.
+All implementation details live in dedicated modules:
+
+    pose_cache.py          ArUco timeout / pose freshness
+    route_manager.py       TSP route, ball gathering, px lookup
+    tsp_christofides.py    Christofides algorithm
+    navigation.py          angle_to_target, angle_error
+    ev3_controller.py      robot hardware commands
+    commands.py            Command enum
 """
 
-import time
 from enum import Enum, auto
 
 import controller.ev3_controller as robot
-from controller.navigation import angle_to_target, angle_error, nearest_ball, distance
-from config import GOAL_POSITION_CM
+from controller.calibration_manager import CalibrationManager
+from controller.calibration_tracker import calibration_angle, calibration_pixels
+from controller.commands import Command
+from controller.navigation import angle_to_target, angle_error
+from controller.pose_cache import PoseCache
+from controller.route_manager import RouteManager, RouteTarget
+from config import GOAL_POSITION_CM, GOAL_POSITION_PX
 
 
 # ---------------------------------------------------------------------------
-# Tuning constants
+# Thresholds
 # ---------------------------------------------------------------------------
 
-ALIGN_THRESHOLD_DEG = 10    # max heading error before driving
-BALL_THRESHOLD_CM   = 10
-# how close before collecting
-GOAL_THRESHOLD_CM   = 25    # how close to goal before releasing
-POSE_TIMEOUT_S      = 0.5   # stop if ArUco lost longer than this
-REVERSE_DURATION_S  = 1.0   # how long to reverse when no balls found
+ALIGN_THRESHOLD_DEG = 10    # degrees — turn if heading error exceeds this
+MIN_TURN_ROTATIONS  = 0.25  # skip turns smaller than this — prevents oscillation
+TURN_DAMPING        = 0.6   # only command 60% of the calculated turn — let next cycle correct
+COLLECT_RADIUS_PX   = 15    # pixels  — collect if closer than this
+BLIND_DRIVE_PX      = 25    # pixels  — inside this AND roughly aimed, drive straight
+BLIND_MAX_ERR_DEG   = 60    # degrees — only blind-drive when error is below this
+GOAL_THRESHOLD_PX   = 30    # pixels  — release when this close to goal
+REVERSE_ROTATIONS   = 1.5   # motor rotations per reverse manoeuvre
+MAX_DRIVE_PX        = 80    # pixels  — cap each drive step so we re-align mid-journey
 
 
 # ---------------------------------------------------------------------------
@@ -31,15 +44,12 @@ REVERSE_DURATION_S  = 1.0   # how long to reverse when no balls found
 # ---------------------------------------------------------------------------
 
 class State(Enum):
-    FIND_BALL  = auto()   # pick nearest ball
-    ALIGN_BALL = auto()   # turn to face it
-    DRIVE_BALL = auto()   # drive to it
-    COLLECT    = auto()   # close claw
-    REVERSE    = auto()   # back up and re-check
-    ALIGN_GOAL = auto()   # turn to face goal
-    DRIVE_GOAL = auto()   # drive to goal
-    RELEASE    = auto()   # open gate
-    DONE       = auto()   # finished
+    SEEK           = auto()
+    REVERSE_WHITE  = auto()
+    REVERSE_ORANGE = auto()
+    DRIVE_GOAL     = auto()
+    RELEASE        = auto()
+    DONE           = auto()
 
 
 # ---------------------------------------------------------------------------
@@ -49,162 +59,180 @@ class State(Enum):
 class GolfBotController:
 
     def __init__(self):
-        self.state          = State.FIND_BALL
-        self.target         = None
-        self.goal           = GOAL_POSITION_CM
-        self._last_command  = None
-        self._last_pos      = None
-        self._last_angle    = None
-        self._last_seen_t   = 0.0
-        self._reverse_start = None
-        print(f"[FSM] Ready. Goal: {self.goal}")
+        self.state           = State.SEEK
+        self._pose           = PoseCache()
+        self._route          = RouteManager()
+        self._cal            = CalibrationManager()
+        self._reversed       = False
+        self._locked_target  = None   # type: RouteTarget | None
+        print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
+              f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
 
-    def update(self, world: dict) -> str:
-        """Call once per frame. Returns the command sent (for debug overlay)."""
-        now = time.time()
+    def update(self, world: dict) -> Command:
+        pose = self._pose.update(world)
+        if pose is None:
+            print("[FSM] ArUco not detected — waiting.")
+            return Command.STOP
 
-        # Update pose cache whenever ArUco gives a valid reading
-        if world.get("robot") is not None and world.get("robot_angle") is not None:
-            self._last_pos    = world["robot"]
-            self._last_angle  = world["robot_angle"]
-            self._last_seen_t = now
+        self._cal.consume(pose.px, pose.angle)
 
-        pose_age    = now - self._last_seen_t
-        robot_pos   = self._last_pos   if pose_age < POSE_TIMEOUT_S else None
-        robot_angle = self._last_angle if pose_age < POSE_TIMEOUT_S else None
-        balls       = _all_balls(world)
+        if self.state == State.SEEK:
+            return self._seek(pose, world)
 
-        if robot_pos is None:
-            return self._send("STOP")
+        if self.state == State.REVERSE_WHITE:
+            return self._reverse_white(world)
 
-        if self.state == State.FIND_BALL:
-            return self._find_ball(robot_pos, balls)
-
-        if self.state == State.ALIGN_BALL:
-            return self._align_to(robot_pos, robot_angle, self.target, next_state=State.DRIVE_BALL)
-
-        if self.state == State.DRIVE_BALL:
-            return self._drive_to(robot_pos, robot_angle, self.target,
-                                  threshold=BALL_THRESHOLD_CM,
-                                  next_state=State.COLLECT,
-                                  align_back=State.ALIGN_BALL)
-
-        if self.state == State.COLLECT:
-            return self._collect()
-
-        if self.state == State.REVERSE:
-            return self._reverse(now, balls)
-
-        if self.state == State.ALIGN_GOAL:
-            return self._align_to(robot_pos, robot_angle, self.goal, next_state=State.DRIVE_GOAL)
+        if self.state == State.REVERSE_ORANGE:
+            return self._reverse_orange(world)
 
         if self.state == State.DRIVE_GOAL:
-            return self._drive_to(robot_pos, robot_angle, self.goal,
-                                  threshold=GOAL_THRESHOLD_CM,
-                                  next_state=State.RELEASE,
-                                  align_back=State.ALIGN_GOAL)
+            return self._drive_goal(pose)
 
         if self.state == State.RELEASE:
-            return self._release()
+            robot.release()
+            self._go(State.DONE)
+            return Command.RELEASE
 
-        if self.state == State.DONE:
-            return self._send("STOP")
+        return Command.STOP   # DONE
 
-        return self._send("STOP")
+    # -------------------------------------------------------------------------
+    # States
+    # -------------------------------------------------------------------------
 
-    # --- State handlers -------------------------------------------------------
+    def _seek(self, pose, world) -> Command:
+        # ── 1. Lock target ──────────────────────────────────────────────
+        if self._locked_target is None:
+            self._locked_target = self._route.get_target(pose.pos, pose.px, world)
 
-    def _find_ball(self, robot_pos, balls) -> str:
-        self.target = nearest_ball(robot_pos, balls)
-        if self.target is None:
+        if self._locked_target is None:
             print("[FSM] No balls visible — reversing.")
-            self._reverse_start = None
-            self._go(State.REVERSE)
+            self._route.clear()
+            self._reversed = False
+            self._go(State.REVERSE_WHITE)
+            return Command.STOP
+
+        target = self._locked_target
+
+        # ── 2. Measure error every cycle (handles drift) ────────────────
+        dist_px        = _dist_px(pose.px, target.px)
+        target_bearing = angle_to_target(pose.pos, target.cm)
+        err            = angle_error(pose.angle, target_bearing)
+
+        print(f"[SEEK] robot=({pose.px[0]:.0f},{pose.px[1]:.0f})px heading={pose.angle:.1f}°  "
+              f"target=({target.px[0]:.0f},{target.px[1]:.0f})px  "
+              f"err={err:.1f}°  dist={dist_px:.0f}px")
+
+        # ── 3. Close enough → collect ───────────────────────────────────
+        if dist_px <= COLLECT_RADIUS_PX:
+            print(f"[FSM] Collect — dist={dist_px:.0f}px")
+            self._locked_target = None
+            self._route.advance()
+            robot.collect()
+            self._pose.invalidate()
+            return Command.COLLECT
+
+        # ── 4. Close range — drive straight if roughly aimed ─────────────
+        # Below BLIND_DRIVE_PX the bearing gets noisy.  Only blind-drive
+        # when we're roughly pointed at the target; otherwise fall through
+        # to the normal turn logic (still reliable at this range).
+        if dist_px <= BLIND_DRIVE_PX and abs(err) <= BLIND_MAX_ERR_DEG:
+            drive_px  = dist_px - COLLECT_RADIUS_PX
+            rotations = drive_px / calibration_pixels.ratio
+            print(f"[FSM] Blind-drive  {drive_px:.0f}px → {rotations:.2f}rot  (close + aimed)")
+            self._cal.record_drive(pose.px, rotations)
+            robot.drive(rotations)
+            self._pose.invalidate()
+            return Command.FORWARD
+
+        # ── 5. Rotate until aligned ─────────────────────────────────────
+        if abs(err) > ALIGN_THRESHOLD_DEG:
+            rotations = abs(err) / calibration_angle.ratio * TURN_DAMPING
+            if rotations < MIN_TURN_ROTATIONS:
+                # Deadband — skip tiny turns that cause oscillation
+                pass
+            else:
+                cmd = Command.RIGHT if err > 0 else Command.LEFT
+                print(f"[FSM] Turn {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot (damped)")
+                self._cal.record_turn(pose.angle, rotations)
+                robot.turn(rotations, cmd.name)
+                self._pose.invalidate()
+                return cmd
+
+        # ── 6. Drive forward (capped, re-check next cycle) ─────────────
+        drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
+        rotations = drive_px / calibration_pixels.ratio
+        print(f"[FSM] Drive  {drive_px:.0f}px → {rotations:.2f}rot")
+        self._cal.record_drive(pose.px, rotations)
+        robot.drive(rotations)
+        self._pose.invalidate()
+        return Command.FORWARD
+
+    def _reverse_white(self, world) -> Command:
+        if not self._reversed:
+            robot.reverse(REVERSE_ROTATIONS)
+            self._pose.invalidate()
+            self._reversed = True
+            return Command.BACKWARD
+
+        self._reversed = False
+        if world.get("white_balls") or world.get("ob"):
+            self._go(State.SEEK)
         else:
-            print(f"[FSM] Target: {self.target}")
-            self._go(State.ALIGN_BALL)
-        return self._send("STOP")
+            self._go(State.REVERSE_ORANGE)
+        return Command.STOP
 
-    def _reverse(self, now: float, balls: list) -> str:
-        if self._reverse_start is None:
-            self._reverse_start = now
+    def _reverse_orange(self, world) -> Command:
+        if not self._reversed:
+            robot.reverse(REVERSE_ROTATIONS)
+            self._pose.invalidate()
+            self._reversed = True
+            return Command.BACKWARD
 
-        if now - self._reverse_start < REVERSE_DURATION_S:
-            return self._send("BACKWARD")
-
-        # Done reversing — check for balls again
-        self._reverse_start = None
-        if balls:
-            print("[FSM] Balls found after reverse — resuming.")
-            self._go(State.FIND_BALL)
+        self._reversed = False
+        if world.get("ob"):
+            self._go(State.SEEK)
         else:
-            print("[FSM] No balls after reverse — heading to goal.")
-            self._go(State.ALIGN_GOAL)
-        return self._send("STOP")
+            self._go(State.DRIVE_GOAL)
+        return Command.STOP
 
-    def _align_to(self, robot_pos, robot_angle, target, next_state: State) -> str:
-        if target is None or robot_angle is None:
-            return self._send("STOP")
-        error = angle_error(robot_angle, angle_to_target(robot_pos, target))
-        print(f"[FSM] Aligning → {next_state.name}  error: {error:.1f}°")
-        if abs(error) <= ALIGN_THRESHOLD_DEG:
-            self._go(next_state)
-            return self._send("STOP")
-        return self._send("RIGHT" if error > 0 else "LEFT")
+    def _drive_goal(self, pose) -> Command:
+        err = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
 
-    def _drive_to(self, robot_pos, robot_angle, target, threshold: float,
-                  next_state: State, align_back: State) -> str:
-        if target is None or robot_angle is None:
-            return self._send("STOP")
-        dist  = distance(robot_pos, target)
-        error = angle_error(robot_angle, angle_to_target(robot_pos, target))
-        print(f"[FSM] Driving — {dist:.1f} cm  error: {error:.1f}°")
-        if dist <= threshold:
-            self._go(next_state)
-            return self._send("STOP")
-        if abs(error) > ALIGN_THRESHOLD_DEG * 2:
-            self._go(align_back)
-            return self._send("STOP")
-        return self._send("FORWARD")
+        if abs(err) > ALIGN_THRESHOLD_DEG:
+            rotations = abs(err) / calibration_angle.ratio * TURN_DAMPING
+            if rotations >= MIN_TURN_ROTATIONS:
+                cmd = Command.RIGHT if err > 0 else Command.LEFT
+                print(f"[FSM] Goal-align {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot (damped)")
+                self._cal.record_turn(pose.angle, rotations)
+                robot.turn(rotations, cmd.name)
+                self._pose.invalidate()
+                return cmd
 
-    def _collect(self) -> str:
-        print("[FSM] Collecting...")
-        robot.collect()
-        print("[FSM] Done. Finding next ball.")
-        self._go(State.FIND_BALL)
-        return "COLLECT"
+        dist_px = _dist_px(pose.px, GOAL_POSITION_PX)
+        if dist_px > GOAL_THRESHOLD_PX:
+            drive_px = min(dist_px - GOAL_THRESHOLD_PX, MAX_DRIVE_PX)
+            rotations = drive_px / calibration_pixels.ratio
+            print(f"[FSM] Goal-drive  {drive_px:.0f}px → {rotations:.2f}rot")
+            self._cal.record_drive(pose.px, rotations)
+            robot.drive(rotations)
+            self._pose.invalidate()
+            return Command.FORWARD
 
-    def _release(self) -> str:
-        print("[FSM] Releasing...")
-        robot.release()
-        print("[FSM] Done.")
-        self._go(State.DONE)
-        return "RELEASE"
+        print("[FSM] At goal — releasing.")
+        self._go(State.RELEASE)
+        return Command.STOP
 
-    # --- Helpers --------------------------------------------------------------
-
-    def _send(self, command: str) -> str:
-        if command != self._last_command:
-            if   command == "FORWARD":  robot.drive()
-            elif command == "BACKWARD": robot.reverse()
-            elif command == "LEFT":     robot.turn_left()
-            elif command == "RIGHT":    robot.turn_right()
-            elif command == "STOP":     robot.stop()
-            self._last_command = command
-        return command
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
 
     def _go(self, new_state: State):
         print(f"[FSM] {self.state.name} → {new_state.name}")
         self.state = new_state
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _all_balls(world: dict) -> list:
-    """Combine white balls and orange ball into one list — no colour preference in MVP."""
-    balls = list(world.get("white_balls", []))
-    if world.get("ob"):
-        balls.append(world["ob"])
-    return balls
+def _dist_px(a, b) -> float:
+    if a is None or b is None:
+        return 0.0
+    import math
+    return math.hypot(a[0] - b[0], a[1] - b[1])

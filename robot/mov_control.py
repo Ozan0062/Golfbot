@@ -6,8 +6,8 @@ from ev3dev2.motor import MoveTank, SpeedPercent, OUTPUT_A, OUTPUT_D
 
 tank = MoveTank(OUTPUT_D, OUTPUT_A)
 
-DRIVE_SPEED_PCT = 70
-TURN_SPEED_PCT  = 50
+DRIVE_SPEED_PCT = 50
+TURN_SPEED_PCT  = 25
 
 # Flip to -1 if motors are mounted in reverse
 MOTOR_DIR = -1

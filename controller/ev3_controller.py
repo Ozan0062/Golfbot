@@ -2,19 +2,15 @@
 ev3_controller.py — PC-side interface to the EV3 robot.
 
 Sends string commands over TCP to ev3_server.py running on the brick.
-The robot team owns ev3_server.py and the command strings.
-This file is the controller team's end of that contract.
 
 Commands the brick must handle (ev3_server.py):
-    FORWARD     — drive straight
-    BACKWARD    — drive straight in reverse
-    LEFT        — turn left in place
-    RIGHT       — turn right in place
-    STOP        — stop all drive motors
-    GET_ANGLE   — reply with gyro angle (float)
-    RESET_ANGLE — reset gyro to 0
-    COLLECT     — run claw to pick up ball  (blocking on brick)
-    RELEASE     — open gate to release ball (blocking on brick)
+    FORWARD  <rot>   — drive forward <rot> motor rotations, reply "DONE"
+    BACKWARD <rot>   — drive backward <rot> motor rotations, reply "DONE"
+    LEFT     <rot>   — turn left <rot> motor rotations, reply "DONE"
+    RIGHT    <rot>   — turn right <rot> motor rotations, reply "DONE"
+    STOP             — stop all drive motors (fire-and-forget)
+    COLLECT          — run claw to pick up ball (blocking on brick), reply "DONE"
+    RELEASE          — open gate to release ball (blocking on brick), reply "DONE"
 """
 
 import socket
@@ -22,23 +18,22 @@ import socket
 HOST = "10.233.49.35"   # EV3 IP over WiFi
 PORT = 5000
 
+RECV_TIMEOUT_S = 15.0   # max seconds to wait for brick to respond
+
 
 # ---------------------------------------------------------------------------
-# Low-level transport (don't call these from state_machine.py)
+# Low-level transport
 # ---------------------------------------------------------------------------
 
 def _send(command: str):
-    """Send a fire-and-forget command to the brick."""
+    """Fire-and-forget — no response expected."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         s.sendall(command.encode())
 
 
-RECV_TIMEOUT_S = 10.0   # max seconds to wait for brick to respond
-
-
 def _send_recv(command: str) -> str:
-    """Send a command and return the brick's response. Returns '' on timeout/error."""
+    """Send command and block until brick replies. Returns '' on error."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(RECV_TIMEOUT_S)
@@ -46,74 +41,48 @@ def _send_recv(command: str) -> str:
             s.sendall(command.encode())
             return s.recv(1024).decode()
     except (socket.timeout, OSError) as e:
-        print(f"[EV3] {command} timed out or failed: {e}")
+        print(f"[EV3] {command!r} failed: {e}")
         return ""
 
 
 # ---------------------------------------------------------------------------
-# Movement
+# Movement  (all blocking — wait for brick to finish)
 # ---------------------------------------------------------------------------
 
-DEFAULT_DRIVE_ROTATIONS = 1.0   # temporary — replace with calibration once tuned
-DEFAULT_TURN_ROTATIONS  = 0.5   # temporary — replace with calibration once tuned
+def drive(rotations: float):
+    """Drive straight forward by <rotations> motor rotations. Blocking."""
+    _send_recv(f"FORWARD {rotations}")
 
 
-def drive(rotations: float = DEFAULT_DRIVE_ROTATIONS):
-    """Drive straight forward."""
-    _send(f"FORWARD {rotations}")
+def reverse(rotations: float):
+    """Drive straight backward by <rotations> motor rotations. Blocking."""
+    _send_recv(f"BACKWARD {rotations}")
 
 
-def reverse(rotations: float = DEFAULT_DRIVE_ROTATIONS):
-    """Drive straight backward."""
-    _send(f"BACKWARD {rotations}")
-
-
-def turn_left(rotations: float = DEFAULT_TURN_ROTATIONS):
-    """Turn left (counter-clockwise) in place."""
-    _send(f"LEFT {rotations}")
-
-
-def turn_right(rotations: float = DEFAULT_TURN_ROTATIONS):
-    """Turn right (clockwise) in place."""
-    _send(f"RIGHT {rotations}")
+def turn(rotations: float, direction: str = "LEFT"):
+    """
+    Turn in place by <rotations> motor rotations. Blocking.
+    direction: "LEFT" (counter-clockwise) or "RIGHT" (clockwise)
+    """
+    if direction not in ("LEFT", "RIGHT"):
+        raise ValueError(f"direction must be 'LEFT' or 'RIGHT', got {direction!r}")
+    _send_recv(f"{direction} {rotations}")
 
 
 def stop():
-    """Stop all motors."""
+    """Stop all motors immediately (fire-and-forget)."""
     _send("STOP")
 
 
 # ---------------------------------------------------------------------------
-# Gyro
-# ---------------------------------------------------------------------------
-
-def get_angle() -> float:
-    """Return accumulated gyro angle in degrees since last reset."""
-    return float(_send_recv("GET_ANGLE"))
-
-
-def reset_angle():
-    """Reset gyro to 0. Call once at startup before moving."""
-    _send("RESET_ANGLE")
-
-
-# ---------------------------------------------------------------------------
-# Claw & gate  (robot team must add handlers in ev3_server.py)
+# Claw & gate
 # ---------------------------------------------------------------------------
 
 def collect():
-    """
-    Close the claw to pick up a ball.
-    Blocking — waits for the brick to finish before returning.
-    Requires: COLLECT handler in ev3_server.py using claw_control.py
-    """
-    _send_recv("COLLECT")   # recv forces us to wait for brick confirmation
+    """Close claw to pick up a ball. Blocking."""
+    _send_recv("COLLECT")
 
 
 def release():
-    """
-    Open the gate to release the ball at the goal.
-    Blocking — waits for the brick to finish before returning.
-    Requires: RELEASE handler in ev3_server.py using gate_control.py
-    """
-    _send_recv("RELEASE")   # recv forces us to wait for brick confirmation
+    """Open gate to release ball at goal. Blocking."""
+    _send_recv("RELEASE")

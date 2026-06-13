@@ -9,8 +9,18 @@ CAMERA_HEIGHT = 640
 FIELD_WIDTH_CM = 180.0
 FIELD_HEIGHT_CM = 120.0
 
+# Warped image dimensions (must match warp_field defaults)
+WARPED_WIDTH  = 640
+WARPED_HEIGHT = 480
+
+# Navigation safety
+# Robot centre must stay this far from field edges while collecting balls.
+# Set this to at least half the robot's widest dimension.
+FIELD_SAFETY_MARGIN_CM = 15.0
+
 # Goal position — hardcoded: far right, vertically centered
 GOAL_POSITION_CM = (FIELD_WIDTH_CM, FIELD_HEIGHT_CM / 2)
+GOAL_POSITION_PX = (WARPED_WIDTH, WARPED_HEIGHT // 2)
 
 #yolo models
 FIELD_MODEL_PATH = "vision/models/best_field.onnx"
@@ -23,6 +33,13 @@ CLASS_NAMES = {
     1: "ob",  #orange ball
     2: "wb",  #white ball
 }
+
+# Drive/turn calibration initial estimates (tune these to your robot)
+PIXELS_PER_ROTATION  = 47.0  # pixels the robot travels per motor rotation (measured)
+DEGREES_PER_ROTATION = 40.0  # degrees the robot turns per motor rotation
+
+# False-detection filter: ignore ball detections within this radius of the robot
+ROBOT_FILTER_RADIUS_PX = 30  # pixels in warped (640×480) image
 
 #ArUco marker
 ARUCO_DICT = "DICT_4X4_50"

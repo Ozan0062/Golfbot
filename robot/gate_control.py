@@ -35,7 +35,7 @@ class Gate:
 
         return True
 
-    def rotate(self, rotations, speed=50):
+    def rotate(self, rotations, speed=100):
         return self._turn(rotations * 360, speed)
 
     def open(self, speed=30):

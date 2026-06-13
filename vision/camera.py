@@ -4,9 +4,8 @@
 
 import cv2
 import sys
-import time
 import os
-from datetime import datetime
+import threading
 sys.path.append(".")
 from config import CAMERA_INDEX, CAMERA_WIDTH, CAMERA_HEIGHT
 
@@ -17,6 +16,7 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
         cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         ret, _ = cap.read()
         if cap.isOpened() and ret:
             if i != index:
@@ -27,9 +27,57 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
     raise RuntimeError("Could not find any working camera (tried indices 0-4)")
 
 
+class CameraStream:
+    """
+    Background thread that continuously drains the camera buffer.
+
+    The thread calls cap.read() in a tight loop and stores the result.
+    Because it never stops reading, the buffer never builds up — even
+    during long blocking EV3 moves.
+
+    Call latest() to get the most recent frame.  No flushing needed.
+    """
+
+    def __init__(self, cap):
+        self._cap     = cap
+        self._frame   = None
+        self._lock    = threading.Lock()
+        self._running = True
+        t = threading.Thread(target=self._loop, daemon=True)
+        t.start()
+
+    def _loop(self):
+        while self._running:
+            ret, frame = self._cap.read()
+            if ret:
+                with self._lock:
+                    self._frame = frame
+
+    def latest(self):
+        """Return a copy of the most recently captured frame, or None if not ready yet."""
+        with self._lock:
+            return self._frame.copy() if self._frame is not None else None
+
+    def stop(self):
+        """Stop the background thread and release the camera."""
+        self._running = False
+        self._cap.release()
+        cv2.destroyAllWindows()
+
+
+def open_stream(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT) -> CameraStream:
+    """Open camera and start background capture thread. Use in main loop."""
+    cap = open_camera(index, width, height)
+    return CameraStream(cap)
+
+
 def grab_frame(cap):
-    for _ in range(2): 
-        cap.grab() 
+    """
+    Grab a single frame from a raw VideoCapture.
+    Used by standalone test scripts that don't need the stream thread.
+    """
+    for _ in range(2):
+        cap.grab()
     ret, frame = cap.read()
     if not ret:
         raise RuntimeError("Failed to grab frame from camera")
@@ -37,7 +85,7 @@ def grab_frame(cap):
 
 
 def release(cap):
-    """Clean up camera and any OpenCV windows."""
+    """Clean up a raw VideoCapture and any OpenCV windows."""
     cap.release()
     cv2.destroyAllWindows()
 
@@ -51,10 +99,9 @@ if __name__ == "__main__":
     cap = open_camera()
     os.makedirs("images-robot", exist_ok=True)
 
-    # Continue count from existing images
     existing = [f for f in os.listdir("images-robot") if f.endswith(".jpg") and f[:-4].isdigit()]
     existing_count = max((int(f[:-4]) for f in existing), default=0)
-    count = existing_count
+    count  = existing_count
     target = existing_count + TOTAL_IMAGES
     if count:
         print(f"Resuming from image {count + 1}. {TOTAL_IMAGES} more to go.")
@@ -65,10 +112,10 @@ if __name__ == "__main__":
         cv2.imshow("Camera Test", frame)
 
         key = cv2.waitKey(1) & 0xFF
-        if key == 27:           # ESC
+        if key == 27:
             print("Aborted early.")
             break
-        elif key == ord(" "):   # SPACE
+        elif key == ord(" "):
             count += 1
             filename = os.path.join("images-robot", f"{count}.jpg")
             cv2.imwrite(filename, frame)

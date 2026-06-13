@@ -124,8 +124,23 @@ def load_calibration():
 
 
 def undistort(frame, mtx, dist):
-    """Apply lens distortion correction to a frame."""
+    """Apply lens distortion correction to a frame (slow — recomputes map every call)."""
     return cv2.undistort(frame, mtx, dist)
+
+
+def build_undistort_maps(mtx, dist, size):
+    """
+    Build remap lookup tables once at startup.
+    size = (width, height).  Returns (map1, map2) for cv2.remap().
+    """
+    w, h = size
+    new_mtx, _ = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
+    return cv2.initUndistortRectifyMap(mtx, dist, None, new_mtx, (w, h), cv2.CV_16SC2)
+
+
+def remap(frame, map1, map2):
+    """Fast undistortion using precomputed maps."""
+    return cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
 
 
 # ── CLI ─────────────────────────────────────────────

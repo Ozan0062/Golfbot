@@ -4,3 +4,4 @@ numpy>=1.24.0
 onnx>=1.14.0
 onnxruntime>=1.16.0
 onnxslim>=0.1.71
+networkx>=3.0

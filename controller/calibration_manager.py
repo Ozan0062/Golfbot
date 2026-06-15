@@ -1,23 +1,12 @@
 """
-calibration_manager.py — Deferred calibration after blocking moves.
+# before a drive:
+cal.record_drive(robot_px, rotations)
 
-After a drive or turn the EV3 brick blocks until the move finishes.  The
-ArUco marker can't be read mid-move, so calibration is deferred: the state
-machine records what it intended to do, then on the next frame (with fresh
-pose data) CalibrationManager computes the actual result and updates the EMA
-trackers in calibration_tracker.py.
+# before a turn:
+cal.record_turn(robot_angle, rotations)
 
-Usage:
-    cal = CalibrationManager()
-
-    # before a drive:
-    cal.record_drive(robot_px, rotations)
-
-    # before a turn:
-    cal.record_turn(robot_angle, rotations)
-
-    # top of every frame (after pose is known):
-    cal.consume(pose.px, pose.angle)
+# top of every frame (after pose is known):
+cal.consume(pose.px, pose.angle)
 """
 
 from controller.calibration import measure_pixels_per_rotation, measure_degrees_per_rotation

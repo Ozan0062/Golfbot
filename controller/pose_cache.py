@@ -15,9 +15,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-
-POSE_TIMEOUT_S = 0.5   # reject cached pose older than this
-SETTLE_S       = 0.2  # blackout window after a move (robot coasting time) todo
+POSE_TIMEOUT_S = 0.5 # If the ArUco marker hasn't been seen for this long, consider the pose unknown.
+SETTLE_S = 0.2  # After a blocking move, ignore ArUco readings for this long to let the robot settle before trusting the pose again.
 
 
 @dataclass
@@ -36,9 +35,7 @@ class PoseCache:
 
     def invalidate(self):
         """
-        Call after any blocking robot move.  Clears the cached pose and blocks
-        new detections for SETTLE_S so the robot can fully stop before the next
-        ArUco reading is trusted.
+        Call after a blocking move to enforce a settle window.
         """
         self._pose        = None
         self._last_seen   = 0.0

@@ -1,99 +1,84 @@
 # GolfBot
 
-Autonomous golf ball collection robot using a Lego EV3 brick and overhead camera vision.
+Autonomous golf ball collection robot. EV3 brick controlled from a PC via TCP, using an overhead camera with ArUco marker tracking and YOLO object detection.
 
-The project is split across three areas of responsibility:
+**Field:** 180×120 cm. **Balls:** white (collect first) + orange (collect last). **Obstacle:** cross in the field centre.
 
-- **robot/** — code that runs on the EV3 brick (motors + gyro)
-- **vision/** — image recognition: field detection, ball/robot detection, coordinate mapping
-- **controller/** — navigation logic: state machine, pathfinding, robot communication
+## Architecture
 
----
+```
+Overhead Camera
+      │
+      ▼
+ Vision Pipeline ──► world dict ──► State Machine ──► TCP ──► EV3 Brick
+ (YOLO + ArUco)      (positions)     (decisions)              (motors)
+```
+
+The PC runs the vision pipeline and controller. The EV3 brick runs a socket server that executes motor commands.
 
 ## Project Structure
 
 ```
 Golfbot/
-├── main.py                         ← entry point
-├── config.py                       ← shared constants (field size, model paths, camera index)
+├── main.py                          ← entry point, camera loop
+├── config.py                        ← all shared constants
 ├── requirements.txt
 │
-├── robot/                          ← EV3 brick code (robot team)
-│   ├── ev3_server.py               ← socket server, runs on the brick
-│   └── deploy.bat                  ← deploys robot/ to the brick over SCP
-|                                   ← insert new files here for movement etc.
+├── vision/
+│   ├── camera.py                    ← camera open/grab/release
+│   ├── field.py                     ← field corner detection + perspective warp
+│   ├── detector.py                  ← YOLO object detection (balls, cross)
+│   ├── aruco.py                     ← ArUco marker detection (robot pose)
+│   ├── tracker.py                   ← pixel→cm conversion, world dict assembly
+│   ├── calibration.py               ← camera lens calibration
+│   └── models/                      ← YOLO .onnx models
 │
-├── vision/                         ← image recognition (vision team)
-│   ├── camera.py                   ← camera open/grab/release
-│   ├── field.py                    ← field corner detection + perspective warp
-│   ├── detector.py                 ← YOLO object detection
-│   ├── tracker.py                  ← pixel → cm conversion, object extraction
-│   ├── models/                     ← YOLO .onnx model files
-│   ├── training/                   ← model training scripts
-│   └── data/                       ← training images
+├── controller/
+│   ├── state_machine.py             ← FSM: SEEK→AVOID→ALIGN→APPROACH→...→DONE
+│   ├── navigation.py                ← angle math, path clearance, wall/corner geometry
+│   ├── route_manager.py             ← ball ordering (Christofides TSP, white-first)
+│   ├── ev3_controller.py            ← TCP commands to EV3
+│   ├── calibration_manager.py       ← runtime drive/turn calibration
+│   ├── calibration_tracker.py       ← EMA ratio tracking (px/rot, deg/rot)
+│   ├── pose_cache.py                ← caches robot pose between detections
+│   ├── tsp_christofides.py          ← 1.5-approx TSP solver
+│   ├── commands.py                  ← Command enum
+│   └── controller_guide.md          ← controller TLDR
 │
-├── controller/                     ← navigation logic (controller team)
-│   ├── state_machine.py            ← finite state machine (IDLE → ALIGN → DRIVE → DONE)
-│   ├── navigation.py               ← angle/distance math helpers
-│   ├── ev3_controller.py           ← sends commands to the brick over TCP
-│   └── controller_guide.md        ← detailed guide for the controller
+├── robot/
+│   ├── ev3_server.py                ← socket server on the EV3 brick
+│   └── deploy.bat                   ← deploy to brick via SCP
 │
-└── test/
-    └── test_connection.py          ← sanity check: camera + robot connection
+└── test/                            ← hardware and integration tests
 ```
-
----
 
 ## Setup
 
+```bash
+git clone <repo-url> && cd Golfbot
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+cd robot && deploy.bat (PS: maker)  # deploy code to EV3 brick
+cd .. && python main.py
 ```
-1. Clone the repository
-   git clone <repo-url>
-   cd Golfbot
-
-2. Create and activate a virtual environment
-   python -m venv venv
-   venv\Scripts\activate        (Windows)
-
-3. Install dependencies
-   pip install -r requirements.txt
-
-4. Deploy code to the EV3 brick
-   cd robot
-   deploy.bat
-
-5. Run
-   python main.py
-```
-
----
 
 ## How It Works
 
-1. The overhead camera captures a frame.
-2. `vision/field.py` detects the field corners and warps the image to a top-down view.
-3. `vision/detector.py` runs YOLO to find the robot, white balls, orange ball, and cross marker.
-4. `vision/tracker.py` converts pixel coordinates to real-world cm positions.
-5. `controller/state_machine.py` receives these positions every frame and decides what command to send (`FORWARD`, `LEFT`, `RIGHT`, `STOP`).
-6. `controller/ev3_controller.py` sends the command to the EV3 brick over TCP.
-7. `robot/ev3_server.py` receives the command and drives the motors accordingly.
+1. Camera grabs a frame
+2. YOLO detects field corners → perspective warp to top-down 640×480 image
+3. YOLO detects balls and cross, ArUco detects robot pose
+4. Positions converted to cm, assembled into a `world` dict
+5. State machine decides next action: turn, drive, collect, or avoid obstacle
+6. Command sent to EV3 over TCP, motors execute
 
----
+## State Machine
+
+SEEK → lock target → check cross obstruction → check wall/corner → ALIGN → APPROACH → collect → SEEK
+
+When no balls remain: REVERSE (scan) → DRIVE_GOAL → RELEASE → DONE
+
+Cross obstacle avoidance and wall/corner approach both use staging waypoints — the robot drives to a safe position first, then approaches the ball from the correct angle.
 
 ## Configuration
 
-All constants are in `config.py`:
-
-| Constant | Default | Description |
-|---|---|---|
-| `CAMERA_INDEX` | `1` | Camera device index (1 = USB, 0 = built-in) |
-| `FIELD_WIDTH_CM` | `180.0` | Physical field width in cm |
-| `FIELD_HEIGHT_CM` | `120.0` | Physical field height in cm |
-| `CONFIDENCE_THRESHOLD` | `0.5` | YOLO detection confidence cutoff |
-
-Navigation thresholds are in `controller/state_machine.py`:
-
-| Constant | Default | Description |
-|---|---|---|
-| `ALIGN_THRESHOLD_DEG` | `10` | Max angle error before driving |
-| `ARRIVAL_THRESHOLD_CM` | `15` | Distance at which a ball counts as collected |
+All constants in `config.py`. Navigation thresholds at the top of `controller/state_machine.py` with inline comments.

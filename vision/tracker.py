@@ -59,6 +59,7 @@ def extract_objects(detections_cm):
     Robot is NOT included here — it comes from ArUco separately.
     Returns dict with both cm and pixel positions:
         "cross":        (x_cm, y_cm) or None
+        "cross_px":     (x_px, y_px) or None
         "ob":           (x_cm, y_cm) or None
         "white_balls":  [(x_cm, y_cm), ...]
         "ob_px":        (x_px, y_px) or None
@@ -66,6 +67,7 @@ def extract_objects(detections_cm):
     """
     objects = {
         "cross":          None,
+        "cross_px":       None,
         "ob":             None,
         "white_balls":    [],
         "ob_px":          None,
@@ -88,6 +90,7 @@ def extract_objects(detections_cm):
         elif name == "cross":
             if objects["cross"] is None or det["confidence"] > (objects.get("_cross_conf") or 0):
                 objects["cross"]       = pos_cm
+                objects["cross_px"]    = pos_px
                 objects["_cross_conf"] = det["confidence"]
 
     return objects

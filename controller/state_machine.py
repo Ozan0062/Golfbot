@@ -1,60 +1,55 @@
-"""
-state_machine.py — GolfBot decision logic.
-
-This file contains only state transitions and decisions.
-All implementation details live in dedicated modules:
-
-    pose_cache.py          ArUco timeout / pose freshness
-    route_manager.py       TSP route, ball gathering, px lookup
-    tsp_christofides.py    Christofides algorithm
-    navigation.py          angle_to_target, angle_error
-    ev3_controller.py      robot hardware commands
-    commands.py            Command enum
-"""
+"""state_machine.py — FSM for golf bot behavior."""
 
 from enum import Enum, auto
+import math
 
 import controller.ev3_controller as robot
 from controller.calibration_manager import CalibrationManager
 from controller.calibration_tracker import calibration_angle, calibration_pixels
 from controller.commands import Command
-from controller.navigation import angle_to_target, angle_error
+from controller.navigation import (
+    angle_to_target, angle_error, path_is_clear, obstacle_waypoint,
+    classify_zone, wall_approach_angle, staging_point,
+)
 from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager, RouteTarget
-from config import GOAL_POSITION_CM, GOAL_POSITION_PX
+from config import GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT
 
 
-# ---------------------------------------------------------------------------
-# Thresholds
-# ---------------------------------------------------------------------------
+# --- Thresholds --------------------------------------------------------------
 
-ALIGN_THRESHOLD_DEG = 10    # degrees — turn if heading error exceeds this
-MIN_TURN_ROTATIONS  = 0.25  # skip turns smaller than this — prevents oscillation
-TURN_DAMPING        = 0.6   # only command 60% of the calculated turn — let next cycle correct
-COLLECT_RADIUS_PX   = 15    # pixels  — collect if closer than this
-BLIND_DRIVE_PX      = 25    # pixels  — inside this AND roughly aimed, drive straight
-BLIND_MAX_ERR_DEG   = 60    # degrees — only blind-drive when error is below this
-GOAL_THRESHOLD_PX   = 30    # pixels  — release when this close to goal
-REVERSE_ROTATIONS   = 1.5   # motor rotations per reverse manoeuvre
-MAX_DRIVE_PX        = 80    # pixels  — cap each drive step so we re-align mid-journey
+ALIGN_THRESHOLD_DEG = 10    # Below this, we consider ourselves "aligned" and drive straight.
+MIN_TURN_ROTATIONS = 0.25   # Ignore turns smaller than this.
+TURN_DAMPING = 0.6          # Reduce turn commands to prevent oscillation when close.
+
+COLLECT_RADIUS_PX = 15      # Accepted radius for collecting a ball.
+GOAL_THRESHOLD_PX = 30      # Close enough to goal to stop driving and release balls.
+REVERSE_ROTATIONS = 1.5     # How far to reverse when no balls are visible.
+MAX_DRIVE_PX = 80           # Cap on drive distance per cycle to allow for course correction.
+
+CROSS_CLEARANCE_PX = 30     # Min distance from cross before avoidance triggers.
+AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
+AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
+
+WALL_MARGIN_PX = 30         # Ball this close to a wall triggers wall approach.
+STAGING_DISTANCE_PX = 60    # How far back from the ball the staging point is.
 
 
-# ---------------------------------------------------------------------------
-# States
-# ---------------------------------------------------------------------------
+# --- States -------------------------------------------------------------------
 
 class State(Enum):
-    SEEK           = auto()
-    REVERSE_WHITE  = auto()
-    REVERSE_ORANGE = auto()
-    DRIVE_GOAL     = auto()
-    RELEASE        = auto()
-    DONE           = auto()
+    SEEK           = auto()   # acquire next target from TSP route
+    AVOID          = auto()   # drive to waypoint to get around cross
+    ALIGN          = auto()   # turn to face the locked target
+    APPROACH       = auto()   # drive toward the locked target
+    REVERSE_WHITE  = auto()   # back up, scan for white or orange balls
+    REVERSE_ORANGE = auto()   # back up, scan for orange ball only
+    DRIVE_GOAL     = auto()   # navigate to goal zone (turn + drive)
+    RELEASE        = auto()   # dump balls at goal
+    DONE           = auto()   # mission complete
 
 
-# ---------------------------------------------------------------------------
-# Controller
-# ---------------------------------------------------------------------------
+# --- Controller ---------------------------------------------------------------
 
 class GolfBotController:
 
@@ -63,176 +58,287 @@ class GolfBotController:
         self._pose           = PoseCache()
         self._route          = RouteManager()
         self._cal            = CalibrationManager()
-        self._reversed       = False
-        self._locked_target  = None   # type: RouteTarget | None
+        self._has_reversed   = False
+        self._locked_target  = None   # type RouteTarget None
+        self._avoid_target   = None   # type tuple
         print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
               f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
 
+    # -- Main entry point (called once per camera frame) -----------------------
+
     def update(self, world: dict) -> Command:
+        """Run one tick of the state machine. Returns the command executed."""
         pose = self._pose.update(world)
         if pose is None:
-            print("[FSM] ArUco not detected — waiting.")
+            print("[FSM] ArUco not detected -- waiting.")
             return Command.STOP
 
         self._cal.consume(pose.px, pose.angle)
 
+        # -- State dispatch ----------------------------------------------------
         if self.state == State.SEEK:
             return self._seek(pose, world)
-
+        if self.state == State.AVOID:
+            return self._avoid(pose)
+        if self.state == State.ALIGN:
+            return self._align(pose)
+        if self.state == State.APPROACH:
+            return self._approach(pose)
         if self.state == State.REVERSE_WHITE:
-            return self._reverse_white(world)
-
+            return self._handle_reverse(world, scan_for=("white_balls", "ob"),
+                                        next_if_found=State.SEEK,
+                                        next_if_empty=State.REVERSE_ORANGE)
         if self.state == State.REVERSE_ORANGE:
-            return self._reverse_orange(world)
-
+            return self._handle_reverse(world, scan_for=("ob",),
+                                        next_if_found=State.SEEK,
+                                        next_if_empty=State.DRIVE_GOAL)
         if self.state == State.DRIVE_GOAL:
-            return self._drive_goal(pose)
-
+            return self._drive_to_goal(pose)
         if self.state == State.RELEASE:
-            robot.release()
-            self._go(State.DONE)
-            return Command.RELEASE
-
+            return self._release_balls()
         return Command.STOP   # DONE
 
-    # -------------------------------------------------------------------------
-    # States
-    # -------------------------------------------------------------------------
+    # --- State: SEEK ----------------------------------------------------------
+    # Lock onto the next ball.
+    # 1. Check if the path is obstructed by the cross -> AVOID waypoint
+    # 2. Check if ball is near wall/corner -> AVOID to staging point
+    # 3. Otherwise -> ALIGN directly
 
     def _seek(self, pose, world) -> Command:
-        # ── 1. Lock target ──────────────────────────────────────────────
+        # Re-lock target only if we don't already have one (returning from AVOID)
         if self._locked_target is None:
             self._locked_target = self._route.get_target(pose.pos, pose.px, world)
 
         if self._locked_target is None:
-            print("[FSM] No balls visible — reversing.")
+            print("[FSM] No balls visible -- reversing.")
             self._route.clear()
-            self._reversed = False
-            self._go(State.REVERSE_WHITE)
+            self._has_reversed = False
+            self._transition(State.REVERSE_WHITE)
             return Command.STOP
 
         target = self._locked_target
+        print(f"[SEEK] Target at ({target.px[0]:.0f},{target.px[1]:.0f})px")
 
-        # ── 2. Measure error every cycle (handles drift) ────────────────
-        dist_px        = _dist_px(pose.px, target.px)
-        target_bearing = angle_to_target(pose.pos, target.cm)
-        err            = angle_error(pose.angle, target_bearing)
+        # -- Check if cross blocks the path ------------------------------------
+        cross_px = world.get("cross_px")
+        if cross_px is not None:
+            clear, _ = path_is_clear(pose.px, target.px, [cross_px],
+                                     CROSS_CLEARANCE_PX)
+            if not clear:
+                wp = obstacle_waypoint(pose.px, target.px, cross_px,
+                                       AVOID_WAYPOINT_DIST_PX,
+                                       WARPED_WIDTH, WARPED_HEIGHT)
+                if wp is not None:
+                    self._avoid_target = wp
+                    print(f"[SEEK] Cross blocking path -- avoid via "
+                          f"({wp[0]:.0f},{wp[1]:.0f})px")
+                    self._transition(State.AVOID)
+                    return Command.STOP
 
-        print(f"[SEEK] robot=({pose.px[0]:.0f},{pose.px[1]:.0f})px heading={pose.angle:.1f}°  "
-              f"target=({target.px[0]:.0f},{target.px[1]:.0f})px  "
-              f"err={err:.1f}°  dist={dist_px:.0f}px")
+        # -- Check if ball is near a wall or corner -----------------------------
+        zone, walls = classify_zone(target.px, WALL_MARGIN_PX,
+                                    WARPED_WIDTH, WARPED_HEIGHT)
+        if zone in ("wall", "corner"):
+            angle = wall_approach_angle(walls)
+            if angle is not None:
+                sp = staging_point(target.px, angle, STAGING_DISTANCE_PX)
+                dist_to_staging = _distance_px(pose.px, sp)
+                if dist_to_staging > AVOID_ARRIVE_PX:
+                    self._avoid_target = sp
+                    print(f"[SEEK] {zone} ball (walls={walls}) -- "
+                          f"staging at ({sp[0]:.0f},{sp[1]:.0f})px")
+                    self._transition(State.AVOID)
+                    return Command.STOP
+                # Already at staging point -- fall through to ALIGN
+                print(f"[SEEK] Already at staging point for {zone} ball")
 
-        # ── 3. Close enough → collect ───────────────────────────────────
+        # Path is clear -- proceed to alignment
+        self._transition(State.ALIGN)
+        return Command.STOP
+
+    # --- State: AVOID ---------------------------------------------------------
+    # Drive to the avoid target waypoint. First turn to face it, then drive toward it.
+    # After reaching the waypoint, clear it and return to SEEK to re-check the path from the new position.
+
+    def _avoid(self, pose) -> Command:
+        wp = self._avoid_target
+        if wp is None:
+            self._transition(State.SEEK)
+            return Command.STOP
+
+        # Turn to face waypoint
+        heading_error = self._heading_error_to_px(pose, wp)
+        if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+            rotations = _angle_to_rotations(heading_error)
+            if rotations >= MIN_TURN_ROTATIONS:
+                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+                print(f"[AVOID] Turn {direction.name}  "
+                      f"{abs(heading_error):.1f}deg -> {rotations:.2f}rot")
+                self._execute_turn(pose, rotations, direction)
+                return direction
+
+        # Drive toward waypoint
+        dist_px = _distance_px(pose.px, wp)
+        if dist_px > AVOID_ARRIVE_PX: # Close enough?
+            drive_px  = min(dist_px - AVOID_ARRIVE_PX, MAX_DRIVE_PX)
+            rotations = _px_to_rotations(drive_px)
+            print(f"[AVOID] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
+            self._execute_drive(pose, rotations)
+            return Command.FORWARD
+
+        # Arrived at waypoint - clear it and re-check path from new position
+        print("[AVOID] Waypoint reached -- returning to SEEK")
+        self._avoid_target = None
+        self._transition(State.SEEK)
+        return Command.STOP
+
+    # --- State: ALIGN ---------------------------------------------------------
+    # Turn to face the locked target. Once heading error is within threshold,
+    # transition to APPROACH. Each frame either turns or passes through.
+
+    def _align(self, pose) -> Command:
+        target = self._locked_target
+        if target is None:
+            self._transition(State.SEEK)
+            return Command.STOP
+
+        heading_error = self._heading_error_to(pose, target.cm)
+        print(f"[ALIGN] heading={pose.angle:.1f}deg  error={heading_error:.1f}deg")
+
+        if abs(heading_error) <= ALIGN_THRESHOLD_DEG:
+            self._transition(State.APPROACH)
+            return Command.STOP
+
+        rotations = _angle_to_rotations(heading_error)
+        if rotations < MIN_TURN_ROTATIONS:
+            self._transition(State.APPROACH)
+            return Command.STOP
+
+        direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+        print(f"[ALIGN] Turn {direction.name}  {abs(heading_error):.1f}deg -> {rotations:.2f}rot")
+        self._execute_turn(pose, rotations, direction)
+        return direction
+        # Stay in ALIGN -- next frame will re-check heading
+
+    # --- State: APPROACH ------------------------------------------------------
+    # Drive toward the locked target. After each drive step, go back to ALIGN
+    # to re-check heading. When close enough, collect and return to SEEK.
+
+    def _approach(self, pose) -> Command:
+        target = self._locked_target
+        if target is None:
+            self._transition(State.SEEK)
+            return Command.STOP
+
+        dist_px = _distance_px(pose.px, target.px)
+        print(f"[APPROACH] dist={dist_px:.0f}px  target=({target.px[0]:.0f},{target.px[1]:.0f})px")
+
+        # Close enough -> collect
         if dist_px <= COLLECT_RADIUS_PX:
-            print(f"[FSM] Collect — dist={dist_px:.0f}px")
+            print(f"[APPROACH] Within collect radius -- grabbing ball")
             self._locked_target = None
             self._route.advance()
             robot.collect()
             self._pose.invalidate()
+            self._transition(State.SEEK)
             return Command.COLLECT
 
-        # ── 4. Close range — drive straight if roughly aimed ─────────────
-        # Below BLIND_DRIVE_PX the bearing gets noisy.  Only blind-drive
-        # when we're roughly pointed at the target; otherwise fall through
-        # to the normal turn logic (still reliable at this range).
-        if dist_px <= BLIND_DRIVE_PX and abs(err) <= BLIND_MAX_ERR_DEG:
-            drive_px  = dist_px - COLLECT_RADIUS_PX
-            rotations = drive_px / calibration_pixels.ratio
-            print(f"[FSM] Blind-drive  {drive_px:.0f}px → {rotations:.2f}rot  (close + aimed)")
-            self._cal.record_drive(pose.px, rotations)
-            robot.drive(rotations)
+        # Drive forward (capped), then re-align
+        drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
+        rotations = _px_to_rotations(drive_px)
+        print(f"[APPROACH] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
+        self._execute_drive(pose, rotations)
+        self._transition(State.ALIGN)
+        return Command.FORWARD
+        # Next frame enters ALIGN to re-check heading before driving again
+
+    # --- State: REVERSE (shared by REVERSE_WHITE and REVERSE_ORANGE) ----------
+
+    def _handle_reverse(self, world, scan_for, next_if_found, next_if_empty):
+        if not self._has_reversed:
+            robot.reverse(REVERSE_ROTATIONS)
             self._pose.invalidate()
+            self._has_reversed = True
+            return Command.BACKWARD
+
+        self._has_reversed = False
+        if any(world.get(key) for key in scan_for):
+            self._transition(next_if_found)
+        else:
+            self._transition(next_if_empty)
+        return Command.STOP
+
+    # --- State: DRIVE_GOAL ----------------------------------------------------
+    # Same turn-then-drive pattern, but toward the fixed goal position.
+
+    def _drive_to_goal(self, pose) -> Command:
+        heading_error = self._heading_error_to(pose, GOAL_POSITION_CM)
+
+        if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+            rotations = _angle_to_rotations(heading_error)
+            if rotations >= MIN_TURN_ROTATIONS:
+                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+                print(f"[GOAL] Turn {direction.name}  {abs(heading_error):.1f}deg -> {rotations:.2f}rot")
+                self._execute_turn(pose, rotations, direction)
+                return direction
+
+        dist_px = _distance_px(pose.px, GOAL_POSITION_PX)
+        if dist_px > GOAL_THRESHOLD_PX:
+            drive_px  = min(dist_px - GOAL_THRESHOLD_PX, MAX_DRIVE_PX)
+            rotations = _px_to_rotations(drive_px)
+            print(f"[GOAL] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
+            self._execute_drive(pose, rotations)
             return Command.FORWARD
 
-        # ── 5. Rotate until aligned ─────────────────────────────────────
-        if abs(err) > ALIGN_THRESHOLD_DEG:
-            rotations = abs(err) / calibration_angle.ratio * TURN_DAMPING
-            if rotations < MIN_TURN_ROTATIONS:
-                # Deadband — skip tiny turns that cause oscillation
-                pass
-            else:
-                cmd = Command.RIGHT if err > 0 else Command.LEFT
-                print(f"[FSM] Turn {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot (damped)")
-                self._cal.record_turn(pose.angle, rotations)
-                robot.turn(rotations, cmd.name)
-                self._pose.invalidate()
-                return cmd
+        print("[GOAL] At goal -- releasing.")
+        self._transition(State.RELEASE)
+        return Command.STOP
 
-        # ── 6. Drive forward (capped, re-check next cycle) ─────────────
-        drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
-        rotations = drive_px / calibration_pixels.ratio
-        print(f"[FSM] Drive  {drive_px:.0f}px → {rotations:.2f}rot")
+    # --- State: RELEASE -------------------------------------------------------
+
+    def _release_balls(self) -> Command:
+        robot.release()
+        self._transition(State.DONE)
+        return Command.RELEASE
+
+    # --- Movement helpers -----------------------------------------------------
+
+    def _execute_drive(self, pose, rotations):
         self._cal.record_drive(pose.px, rotations)
         robot.drive(rotations)
         self._pose.invalidate()
-        return Command.FORWARD
 
-    def _reverse_white(self, world) -> Command:
-        if not self._reversed:
-            robot.reverse(REVERSE_ROTATIONS)
-            self._pose.invalidate()
-            self._reversed = True
-            return Command.BACKWARD
+    def _execute_turn(self, pose, rotations, direction):
+        self._cal.record_turn(pose.angle, rotations)
+        robot.turn(rotations, direction.name)
+        self._pose.invalidate()
 
-        self._reversed = False
-        if world.get("white_balls") or world.get("ob"):
-            self._go(State.SEEK)
-        else:
-            self._go(State.REVERSE_ORANGE)
-        return Command.STOP
+    def _heading_error_to(self, pose, target_cm):
+        """Heading error using cm positions (for ball targets and goal)."""
+        bearing = angle_to_target(pose.pos, target_cm)
+        return angle_error(pose.angle, bearing)
 
-    def _reverse_orange(self, world) -> Command:
-        if not self._reversed:
-            robot.reverse(REVERSE_ROTATIONS)
-            self._pose.invalidate()
-            self._reversed = True
-            return Command.BACKWARD
+    def _heading_error_to_px(self, pose, target_px):
+        """Heading error using px positions (for avoid waypoints)."""
+        bearing = angle_to_target(pose.px, target_px)
+        return angle_error(pose.angle, bearing)
 
-        self._reversed = False
-        if world.get("ob"):
-            self._go(State.SEEK)
-        else:
-            self._go(State.DRIVE_GOAL)
-        return Command.STOP
-
-    def _drive_goal(self, pose) -> Command:
-        err = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
-
-        if abs(err) > ALIGN_THRESHOLD_DEG:
-            rotations = abs(err) / calibration_angle.ratio * TURN_DAMPING
-            if rotations >= MIN_TURN_ROTATIONS:
-                cmd = Command.RIGHT if err > 0 else Command.LEFT
-                print(f"[FSM] Goal-align {cmd.name}  {abs(err):.1f}° → {rotations:.2f}rot (damped)")
-                self._cal.record_turn(pose.angle, rotations)
-                robot.turn(rotations, cmd.name)
-                self._pose.invalidate()
-                return cmd
-
-        dist_px = _dist_px(pose.px, GOAL_POSITION_PX)
-        if dist_px > GOAL_THRESHOLD_PX:
-            drive_px = min(dist_px - GOAL_THRESHOLD_PX, MAX_DRIVE_PX)
-            rotations = drive_px / calibration_pixels.ratio
-            print(f"[FSM] Goal-drive  {drive_px:.0f}px → {rotations:.2f}rot")
-            self._cal.record_drive(pose.px, rotations)
-            robot.drive(rotations)
-            self._pose.invalidate()
-            return Command.FORWARD
-
-        print("[FSM] At goal — releasing.")
-        self._go(State.RELEASE)
-        return Command.STOP
-
-    # -------------------------------------------------------------------------
-    # Helpers
-    # -------------------------------------------------------------------------
-
-    def _go(self, new_state: State):
-        print(f"[FSM] {self.state.name} → {new_state.name}")
+    def _transition(self, new_state):
+        print(f"[FSM] {self.state.name} -> {new_state.name}")
         self.state = new_state
 
 
-def _dist_px(a, b) -> float:
+# --- Module-level helpers -----------------------------------------------------
+
+def _distance_px(a, b):
     if a is None or b is None:
         return 0.0
-    import math
     return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def _px_to_rotations(drive_px):
+    return drive_px / calibration_pixels.ratio
+
+
+def _angle_to_rotations(heading_error):
+    return abs(heading_error) / calibration_angle.ratio * TURN_DAMPING

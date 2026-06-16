@@ -26,7 +26,10 @@ from vision.calibration import load_calibration, build_undistort_maps, remap
 from vision.tracker import robot_px_to_cm
 from controller.calibration_tracker import calibration_pixels
 import controller.ev3_controller as robot
-from config import CAMERA_WIDTH, CAMERA_HEIGHT
+from config import (CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_CENTER_PX,
+                    CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+                    FIELD_WIDTH_CM, FIELD_HEIGHT_CM)
+from main import correct_robot_height
 
 
 DRIVE_PX = 300
@@ -37,7 +40,8 @@ POSE_ATTEMPTS = 30      # max frames to try before giving up on ArUco
 def get_pose(stream, field_model, aruco_detector, undist_maps, last_corners):
     """
     Grab frames until ArUco is detected.  Returns (center_px, angle, warped_corners)
-    in warped coordinates, or (None, None, last_corners) on failure.
+    in warped coordinates (with height correction applied),
+    or (None, None, last_corners) on failure.
     """
     for attempt in range(POSE_ATTEMPTS):
         frame = stream.latest()
@@ -57,6 +61,7 @@ def get_pose(stream, field_model, aruco_detector, undist_maps, last_corners):
             continue
 
         warped, M = warp_field(frame, last_corners)
+        h, w = warped.shape[:2]
 
         # Detect ArUco on the raw (undistorted) frame, project into warped space
         raw_center, raw_angle = detect_robot(aruco_detector, frame)
@@ -68,11 +73,25 @@ def get_pose(stream, field_model, aruco_detector, undist_maps, last_corners):
             pts = np.array([[raw_center, fwd_raw]], dtype=np.float32)
             warped_pts = cv2.perspectiveTransform(pts, M)[0]
             center_px = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-            angle = math.degrees(math.atan2(
-                warped_pts[1][1] - warped_pts[0][1],
-                warped_pts[1][0] - warped_pts[0][0],
-            ))
-            return center_px, angle, last_corners
+            forward_px = (float(warped_pts[1][0]), float(warped_pts[1][1]))
+
+            # Correct for marker height (18cm above floor)
+            center_px = correct_robot_height(
+                center_px, CAMERA_CENTER_PX,
+                CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+                w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+            )
+            forward_px = correct_robot_height(
+                forward_px, CAMERA_CENTER_PX,
+                CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+                w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+            )
+            if center_px is not None and forward_px is not None:
+                angle = math.degrees(math.atan2(
+                    forward_px[1] - center_px[1],
+                    forward_px[0] - center_px[0],
+                ))
+                return center_px, angle, last_corners
 
         time.sleep(0.05)
 

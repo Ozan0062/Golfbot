@@ -10,7 +10,10 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import CAMERA_HEIGHT, CAMERA_WIDTH
-from main import build_world_dict, detect_field, draw_debug_overlay, filter_detections_near_robot, undistort_frame
+from main import (build_world_dict, correct_robot_height, detect_field,
+                  draw_debug_overlay, filter_detections_near_robot, undistort_frame)
+from config import (CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+                    FIELD_WIDTH_CM, FIELD_HEIGHT_CM)
 import state_detector
 from vision.aruco import create_detector, detect_robot
 from vision.calibration import build_undistort_maps, load_calibration
@@ -24,11 +27,11 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     Detect the ArUco marker on the raw (un-warped) frame, then project
     the robot's centre and heading into warped top-down coordinates.
 
-    Returns (center_px, angle_deg) or (None, None).
+    Returns (center_px, forward_px, angle_deg) or (None, None, None).
     """
     center_raw, angle_raw = detect_robot(aruco_detector, raw_frame)
     if center_raw is None:
-        return None, None
+        return None, None, None
 
     # Project two points: the marker centre and a point 50px ahead along the heading.
     # The angle between them in warped space gives the warped heading.
@@ -39,12 +42,13 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     pts = np.array([[center_raw, forward_raw]], dtype=np.float32)
     warped_pts = cv2.perspectiveTransform(pts, homography_matrix)[0]
 
-    center = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-    angle  = math.degrees(math.atan2(
-        warped_pts[1][1] - warped_pts[0][1],
-        warped_pts[1][0] - warped_pts[0][0],
+    center  = (float(warped_pts[0][0]), float(warped_pts[0][1]))
+    forward = (float(warped_pts[1][0]), float(warped_pts[1][1]))
+    angle   = math.degrees(math.atan2(
+        forward[1] - center[1],
+        forward[0] - center[0],
     ))
-    return center, angle
+    return center, forward, angle
 
 
 if __name__ == "__main__":
@@ -64,9 +68,9 @@ if __name__ == "__main__":
     while True:
         # Stream latest frame and undistort
         frame = stream.latest()
-        frame = undistort_frame(frame, undist_maps)
         if frame is None:
             continue   # camera thread not ready yet
+        frame = undistort_frame(frame, undist_maps)
 
         # Detect field and warp to top-down view 
         last_corners = detect_field(field_model, frame, last_corners)
@@ -78,9 +82,26 @@ if __name__ == "__main__":
 
         warped, homography = warp_field(frame, last_corners)
         h, w = warped.shape[:2]
-        robot_center, robot_angle = detect_robot_pose_in_warped_coords(
-        aruco_detector, frame, homography)
-        
+        robot_center, robot_forward, robot_angle = detect_robot_pose_in_warped_coords(
+            aruco_detector, frame, homography)
+
+        # Correct for marker height (18cm above floor)
+        robot_center = correct_robot_height(
+            robot_center, CAMERA_CENTER_PX,
+            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+        )
+        robot_forward = correct_robot_height(
+            robot_forward, CAMERA_CENTER_PX,
+            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+        )
+        if robot_center is not None and robot_forward is not None:
+            robot_angle = math.degrees(math.atan2(
+                robot_forward[1] - robot_center[1],
+                robot_forward[0] - robot_center[0],
+            ))
+
         # Detect objects
         detections = detect_objects(object_model, warped)
         detections = filter_detections_near_robot(detections, robot_center)
@@ -92,5 +113,12 @@ if __name__ == "__main__":
         command_name = command.name if command else "NONE"
         debug = draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name, command_name)
         cv2.imshow("GolfBot", debug)
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
+        # Wait for space to advance, ESC to quit
+        while True:
+            key = cv2.waitKey(50) & 0xFF
+            if key == 27:       # ESC
+                stream.stop()
+                cv2.destroyAllWindows()
+                sys.exit(0)
+            if key == ord(' '):  # Space → next frame
+                break

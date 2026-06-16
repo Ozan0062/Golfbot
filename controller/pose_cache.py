@@ -66,7 +66,7 @@ class PoseCache:
             )
             self._last_seen = now
             if was_empty:
-                print(f"[POSE] Fresh lock — angle={self._pose.angle:.1f}°  pos={self._pose.pos}")
+                print(f"[POSE] Fresh lock — angle={self._pose.angle:.1f}°  pos={self._pose.pos}  px={self._pose.px}")
 
         if self._pose is None:
             return None

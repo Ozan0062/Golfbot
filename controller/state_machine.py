@@ -32,8 +32,10 @@ CROSS_CLEARANCE_PX = 70     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
 AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
 
-WALL_MARGIN_PX = 60        # Ball this close to a wall triggers wall approach.
-STAGING_DISTANCE_PX = 120    # How far back from the ball the staging point is.
+WALL_MARGIN_PX = 120       # Ball this close to a wall triggers wall approach.
+STAGING_DISTANCE_PX = 170    # How far back from the ball the staging point is.
+                             # Must be >= WALL_MARGIN_PX / cos(45°) ≈ 170 so corner
+                             # staging points land outside the margin on both axes.
 
 
 # --- States -------------------------------------------------------------------
@@ -62,6 +64,7 @@ class GolfBotController:
         self._has_reversed   = False
         self._locked_target  = None   # type RouteTarget None
         self._avoid_target   = None   # type tuple
+        self._is_wall_ball   = False  # True when current target is near a wall/corner
         print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
               f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
 
@@ -140,6 +143,7 @@ class GolfBotController:
         zone, walls = classify_zone(target.px, WALL_MARGIN_PX,
                                     WARPED_WIDTH, WARPED_HEIGHT)
         if zone in ("wall", "corner"):
+            self._is_wall_ball = True
             angle = wall_approach_angle(walls)
             if angle is not None:
                 sp = staging_point(target.px, angle, STAGING_DISTANCE_PX)
@@ -152,6 +156,8 @@ class GolfBotController:
                     return Command.STOP
                 # Already at staging point -- fall through to ALIGN
                 print(f"[SEEK] Already at staging point for {zone} ball")
+        else:
+            self._is_wall_ball = False
 
         # Path is clear -- proceed to alignment
         self._transition(State.ALIGN)
@@ -241,6 +247,15 @@ class GolfBotController:
             self._route.advance()
             robot.collect()
             self._pose.invalidate()
+
+            # Wall ball: reverse back to safe distance before resuming
+            if self._is_wall_ball:
+                reverse_rot = _px_to_rotations(STAGING_DISTANCE_PX)
+                print(f"[APPROACH] Wall ball -- reversing {reverse_rot:.2f}rot")
+                robot.reverse(reverse_rot)
+                self._pose.invalidate()
+                self._is_wall_ball = False
+
             self._transition(State.SEEK)
             return Command.COLLECT
 

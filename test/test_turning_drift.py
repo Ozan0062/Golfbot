@@ -32,7 +32,7 @@ from vision.field import load_field_model, detect_corners, sort_corners, warp_fi
 from vision.aruco import create_detector, detect_robot
 from vision.calibration import load_calibration, build_undistort_maps, remap
 from vision.tracker import robot_px_to_cm
-from controller.calibration_tracker import calibration_angle
+from controller.calibration_tracker import calibration_angle_left
 import controller.ev3_controller as robot
 from config import CAMERA_WIDTH, CAMERA_HEIGHT
 
@@ -121,7 +121,7 @@ def main():
     turn_deg = args.degrees
 
     print("=== QR Offset Calculator ===")
-    print(f"Calibration: {calibration_angle.ratio:.1f} deg/rot")
+    print(f"Calibration: {calibration_angle_left.ratio:.1f} deg/rot")
     print(f"Turn amount: {turn_deg}°\n")
 
     field_model    = load_field_model()
@@ -136,7 +136,7 @@ def main():
         print("WARNING: No lens calibration — results include distortion error.")
 
     last_corners = None
-    rotations = turn_deg / calibration_angle.ratio
+    rotations = turn_deg / calibration_angle_left.ratio
 
     # ── Read start pose ───────────────────────────────────────────────
     print("Waiting for ArUco detection...")

@@ -2,6 +2,7 @@
 
 from enum import Enum, auto
 import math
+import time
 
 import controller.ev3_controller as robot
 from controller.calibration_manager import CalibrationManager
@@ -27,12 +28,12 @@ GOAL_THRESHOLD_PX = 80      # Close enough to goal to stop driving and release b
 REVERSE_ROTATIONS = 1.5     # How far to reverse when no balls are visible.
 MAX_DRIVE_PX = 300           # Cap on drive distance per cycle to allow for course correction.
 
-CROSS_CLEARANCE_PX = 30     # Min distance from cross before avoidance triggers.
+CROSS_CLEARANCE_PX = 70     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
 AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
 
 WALL_MARGIN_PX = 30         # Ball this close to a wall triggers wall approach.
-STAGING_DISTANCE_PX = 60    # How far back from the ball the staging point is.
+STAGING_DISTANCE_PX = 110    # How far back from the ball the staging point is.
 
 
 # --- States -------------------------------------------------------------------
@@ -297,7 +298,9 @@ class GolfBotController:
     # --- State: RELEASE -------------------------------------------------------
 
     def _release_balls(self) -> Command:
-        robot.release()
+        robot.gate_open()
+        time.sleep(3)
+        robot.gate_close()
         self._transition(State.DONE)
         return Command.RELEASE
 

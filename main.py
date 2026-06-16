@@ -18,6 +18,8 @@ import cv2
 import numpy as np
 import time
 
+from golfbot_logger import setup_logging, get_logger
+
 from vision.camera   import open_stream
 from vision.field    import load_field_model, detect_corners, sort_corners, warp_field
 from vision.detector import load_object_model, detect_objects, draw_detections
@@ -29,6 +31,8 @@ from controller.state_machine import GolfBotController
 from config import (ROBOT_FILTER_RADIUS_PX, CAMERA_WIDTH, CAMERA_HEIGHT,
                      CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM, CAMERA_CENTER_PX,
                      FIELD_WIDTH_CM, FIELD_HEIGHT_CM, WARPED_WIDTH, WARPED_HEIGHT)
+
+log = get_logger(__name__)
 
 
 # ─── Vision pipeline helpers ─────────────────────────────────────────────────
@@ -167,7 +171,8 @@ def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
 def main():
-    print("GolfBot starting...")
+    setup_logging(level="INFO")
+    log.info("GolfBot starting...")
 
     # Load models and open camera
     field_model    = load_field_model()
@@ -180,7 +185,7 @@ def main():
     undist_maps = None
     if mtx is not None:
         undist_maps = build_undistort_maps(mtx, dist, (CAMERA_WIDTH, CAMERA_HEIGHT))
-        print(f"Lens calibration loaded — undistort maps built ({CAMERA_WIDTH}x{CAMERA_HEIGHT})")
+        log.info("Lens calibration loaded — undistort maps built (%dx%d)", CAMERA_WIDTH, CAMERA_HEIGHT)
 
     controller   = GolfBotController()
     last_corners = None
@@ -196,7 +201,7 @@ def main():
         # ── 2. Detect field and warp to top-down view ────────────────────
         last_corners = detect_field(field_model, frame, last_corners)
         if last_corners is None:
-            print("Waiting for field corners...")
+            log.warning("Waiting for field corners...")
             time.sleep(5) # Avoid spamming
             continue
 

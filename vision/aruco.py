@@ -69,7 +69,7 @@ def draw_robot(frame, center, angle):
     length = 40
     end_x = int(cx + length * np.cos(np.radians(angle)))
     end_y = int(cy + length * np.sin(np.radians(angle)))
-    cv2.arrowedLine(display, (cx, cy), (end_x, end_y), (0, 255, 0), 2, tipLength=0.3)
+    cv2.arrowedLine(display, (cx, cy), (end_x, end_y), (0, 255, 0), 2, tipLength=0.10)
 
     # Label
     cv2.putText(display, f"robot {angle:.0f}deg", (cx + 10, cy - 10),

@@ -15,7 +15,7 @@ Commands the brick must handle (ev3_server.py):
 
 import socket
 
-HOST = "10.233.49.35"   # EV3 IP over WiFi
+HOST = "10.134.107.35"   # EV3 IP over WiFi
 PORT = 5000
 RECV_TIMEOUT_S = 15.0   # Seconds to wait for a response before giving up (for blocking commands)
 

@@ -102,10 +102,37 @@ def build_world_dict(detections, robot_center, robot_angle, image_w, image_h):
     return world
 
 
-def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name, command_name):
+def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name, command_name, locked_target=None):
     """Draw detections, robot marker, and current state on the frame."""
     debug = draw_detections(warped, detections)
     debug = draw_robot(debug, robot_center, robot_angle)
+    
+    if locked_target is not None:
+        px = locked_target.px
+        # Magenta square around target
+        cv2.rectangle(debug, (int(px[0]) - 20, int(px[1]) - 20),
+                      (int(px[0]) + 20, int(px[1]) + 20), (255, 0, 255), 2)
+                      
+        if robot_center is not None and robot_angle is not None:
+            # Yellow square around robot
+            rx, ry = int(robot_center[0]), int(robot_center[1])
+            cv2.rectangle(debug, (rx - 25, ry - 25), (rx + 25, ry + 25), (0, 255, 255), 2)
+            
+            # Calculate distance and angle error
+            dx = px[0] - rx
+            dy = px[1] - ry
+            dist_px = math.hypot(dx, dy)
+            target_heading = math.degrees(math.atan2(dy, dx))
+            heading_error = (target_heading - robot_angle + 180) % 360 - 180
+            
+            # Draw line between them
+            cv2.line(debug, (rx, ry), (int(px[0]), int(px[1])), (0, 255, 255), 1)
+            
+            # Show distance and angle near robot
+            info_str = f"Dist: {dist_px:.0f}px | Ang: {heading_error:.1f}deg"
+            cv2.putText(debug, info_str, (rx - 50, ry - 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
+
     cv2.putText(debug, f"{state_name}  {command_name}",
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     return debug
@@ -165,7 +192,7 @@ def main():
 
         # ── 6. Debug overlay ─────────────────────────────────────────────
         debug = draw_debug_overlay(warped, detections, robot_center, robot_angle,
-                                   controller.state.name, command.name)
+                                   controller.state.name, command.name, controller._locked_target)
         cv2.imshow("GolfBot", debug)
         if cv2.waitKey(1) & 0xFF == 27:
             break

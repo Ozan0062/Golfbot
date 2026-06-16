@@ -22,10 +22,10 @@ ALIGN_THRESHOLD_DEG = 10    # Below this, we consider ourselves "aligned" and dr
 MIN_TURN_ROTATIONS = 0.25   # Ignore turns smaller than this.
 TURN_DAMPING = 0.6          # Reduce turn commands to prevent oscillation when close.
 
-COLLECT_RADIUS_PX = 15      # Accepted radius for collecting a ball.
-GOAL_THRESHOLD_PX = 30      # Close enough to goal to stop driving and release balls.
+COLLECT_RADIUS_PX = 65      # Accepted radius for collecting a ball.
+GOAL_THRESHOLD_PX = 80      # Close enough to goal to stop driving and release balls.
 REVERSE_ROTATIONS = 1.5     # How far to reverse when no balls are visible.
-MAX_DRIVE_PX = 80           # Cap on drive distance per cycle to allow for course correction.
+MAX_DRIVE_PX = 300           # Cap on drive distance per cycle to allow for course correction.
 
 CROSS_CLEARANCE_PX = 30     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.

@@ -5,3 +5,5 @@ onnx>=1.14.0
 onnxruntime>=1.16.0
 onnxslim>=0.1.71
 networkx>=3.0
+python-ev3dev2>=2.1.0
+pytest>=8.0.0

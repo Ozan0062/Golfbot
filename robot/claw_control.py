@@ -10,13 +10,11 @@ class Claw:
         self.motor = motor(port)
         self.gate = gate
 
-    def close_claw(self, speedDPS=-300, seconds=1):
-        self.motor.on_for_seconds(
-            speed=SpeedDPS(speedDPS),
-            seconds=seconds,
-            brake=True,
-            block=True
-        )
+    def close_claw(self, speedDPS=300):
+        self.motor.on(speed=SpeedDPS(speedDPS))
+        self.motor.wait_until('stalled')
+        self.motor.stop(stop_action='hold')
+        print("Claw is closed")
         return True
 
     def open_claw(self, speedDPS=300):

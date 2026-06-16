@@ -173,6 +173,14 @@ class GolfBotController:
             self._transition(State.SEEK)
             return Command.STOP
 
+        # Check arrival FIRST — at close range heading error is unreliable
+        dist_px = _distance_px(pose.px, wp)
+        if dist_px <= AVOID_ARRIVE_PX:
+            print("[AVOID] Waypoint reached -- returning to SEEK")
+            self._avoid_target = None
+            self._transition(State.SEEK)
+            return Command.STOP
+
         # Turn to face waypoint
         heading_error = self._heading_error_to_px(pose, wp)
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
@@ -185,19 +193,11 @@ class GolfBotController:
                 return direction
 
         # Drive toward waypoint
-        dist_px = _distance_px(pose.px, wp)
-        if dist_px > AVOID_ARRIVE_PX: # Close enough?
-            drive_px  = min(dist_px - AVOID_ARRIVE_PX, MAX_DRIVE_PX)
-            rotations = _px_to_rotations(drive_px)
-            print(f"[AVOID] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
-            self._execute_drive(pose, rotations)
-            return Command.FORWARD
-
-        # Arrived at waypoint - clear it and re-check path from new position
-        print("[AVOID] Waypoint reached -- returning to SEEK")
-        self._avoid_target = None
-        self._transition(State.SEEK)
-        return Command.STOP
+        drive_px  = min(dist_px - AVOID_ARRIVE_PX, MAX_DRIVE_PX)
+        rotations = _px_to_rotations(drive_px)
+        print(f"[AVOID] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
+        self._execute_drive(pose, rotations)
+        return Command.FORWARD
 
     # --- State: ALIGN ---------------------------------------------------------
     # Turn to face the locked target. Once heading error is within threshold,

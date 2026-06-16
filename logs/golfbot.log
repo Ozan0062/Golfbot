@@ -1,0 +1,6 @@
+2026-06-16 12:09:12  [32mINFO[0m  golfbot_logger — Log file → /Users/samin/Documents/GitHub/Golfbot/logs/golfbot.log
+2026-06-16 12:09:12  [36mDEBUG[0m  __main__ — DEBUG — fine detail, pipeline values, cm coords
+2026-06-16 12:09:12  [32mINFO[0m  __main__ — INFO — normal milestone, state transition
+2026-06-16 12:09:12  [33mWARNING[0m  __main__ — WARNING — recoverable issue, pose lost
+2026-06-16 12:09:12  [31mERROR[0m  __main__ — ERROR — TCP failure, motor fault
+2026-06-16 12:09:12  [35mCRITICAL[0m  __main__ — CRITICAL — unrecoverable, no camera found

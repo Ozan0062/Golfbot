@@ -18,11 +18,11 @@ from config import GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIG
 
 # --- Thresholds --------------------------------------------------------------
 
-ALIGN_THRESHOLD_DEG = 10    # Below this, we consider ourselves "aligned" and drive straight.
+ALIGN_THRESHOLD_DEG = 2    # Below this, we consider ourselves "aligned" and drive straight.
 MIN_TURN_ROTATIONS = 0.25   # Ignore turns smaller than this.
 TURN_DAMPING = 0.6          # Reduce turn commands to prevent oscillation when close.
 
-COLLECT_RADIUS_PX = 65      # Accepted radius for collecting a ball.
+COLLECT_RADIUS_PX = 90      # Accepted radius for collecting a ball.
 GOAL_THRESHOLD_PX = 80      # Close enough to goal to stop driving and release balls.
 REVERSE_ROTATIONS = 1.5     # How far to reverse when no balls are visible.
 MAX_DRIVE_PX = 300           # Cap on drive distance per cycle to allow for course correction.
@@ -31,8 +31,8 @@ CROSS_CLEARANCE_PX = 30     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
 AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
 
-WALL_MARGIN_PX = 45         # Ball this close to a wall triggers wall approach.
-STAGING_DISTANCE_PX = 110    # How far back from the ball the staging point is.
+WALL_MARGIN_PX = 60        # Ball this close to a wall triggers wall approach.
+STAGING_DISTANCE_PX = 120    # How far back from the ball the staging point is.
 
 
 # --- States -------------------------------------------------------------------

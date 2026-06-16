@@ -27,7 +27,8 @@ while True:
     parts = raw.split()
     if parts[0] == "t":
         try:
-            gate._turn(float(parts[1]))
+            deg = float(parts[1])
+            gate.rotate(deg / 360.0)   # rotate() takes rotations, not degrees
         except (IndexError, ValueError):
             print("  usage: t <degrees>")
     elif parts[0] == "set":
@@ -46,6 +47,8 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind((HOST, PORT))
 server.listen()
 print("Robot ready, listening on port", PORT)
+
+claw.collect_ball()
 
 while True:
     conn, addr = server.accept()
@@ -76,7 +79,7 @@ while True:
             conn.sendall(b"OK")
 
         elif cmd == "RELEASE":
-            gate.open()
+            gate.rotate(4, speed=100)    # open
             time.sleep(1)
-            gate.close()
+            gate.rotate(-4, speed=100)   # close
             conn.sendall(b"OK")

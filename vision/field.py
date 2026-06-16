@@ -8,7 +8,7 @@ import numpy as np
 from ultralytics import YOLO
 import sys
 sys.path.append(".")
-from config import FIELD_MODEL_PATH, CONFIDENCE_THRESHOLD
+from config import FIELD_MODEL_PATH, CONFIDENCE_THRESHOLD, WARPED_WIDTH, WARPED_HEIGHT
 
 
 def load_field_model(path=FIELD_MODEL_PATH):
@@ -55,7 +55,7 @@ def sort_corners(corners):
     return np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 
 
-def warp_field(frame, corners, output_width=640, output_height=480):
+def warp_field(frame, corners, output_width=WARPED_WIDTH, output_height=WARPED_HEIGHT):
     """
     Perspective-warp the field region to a clean top-down rectangle.
     corners must be sorted: TL, TR, BR, BL.

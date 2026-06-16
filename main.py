@@ -6,10 +6,11 @@ Main loop:
   2. Undistort lens distortion (if calibrated)
   3. Detect field corners → perspective-warp to top-down view
   4. Detect robot pose via ArUco marker (on raw frame, projected into warped coords)
-  5. Detect balls and obstacles via YOLO (on warped frame)
-  6. Build a "world" dict with all positions in both px and cm
-  7. Feed world into the state machine → get a Command back
-  8. Draw debug overlay and display
+  5. Correct robot position for marker height (18cm above floor)
+  6. Detect balls and obstacles via YOLO (on warped frame)
+  7. Build a "world" dict with all positions in both px and cm
+  8. Feed world into the state machine → get a Command back
+  9. Draw debug overlay and display
 """
 
 import math
@@ -25,7 +26,9 @@ from vision.aruco    import create_detector, detect_robot, draw_robot
 from vision.calibration import load_calibration, build_undistort_maps, remap
 
 from controller.state_machine import GolfBotController
-from config import ROBOT_FILTER_RADIUS_PX, CAMERA_WIDTH, CAMERA_HEIGHT
+from config import (ROBOT_FILTER_RADIUS_PX, CAMERA_WIDTH, CAMERA_HEIGHT,
+                     CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM, CAMERA_CENTER_PX,
+                     FIELD_WIDTH_CM, FIELD_HEIGHT_CM, WARPED_WIDTH, WARPED_HEIGHT)
 
 
 # ─── Vision pipeline helpers ─────────────────────────────────────────────────
@@ -74,6 +77,56 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
         warped_pts[1][0] - warped_pts[0][0],
     ))
     return center, angle
+
+
+def correct_robot_height(center_px, cam_center_px, cam_h, marker_h,
+                         warped_w, warped_h, field_w, field_h):
+    """
+    Korriger robot-positionen for at QR-koden sidder 18 cm over gulvet.
+
+    Geometri (set fra siden):
+
+        Kamera (C)
+        |╲
+        |  ╲          ← synsvinkel α
+        H    ╲
+        |      ╲
+        |  18cm QR ← markør oppe
+        |   |
+        ────┴──── gulv
+     (312,303)  robot-base (det vi vil finde)
+
+    1. Omregn displacement fra kamera-center til cm (Pythagoras: d = √(dx² + dy²))
+    2. Vinkel fra lodret: α = atan(d / H)
+    3. Vandret afstand til QR 18 cm oppe: d_actual = (H − 18) · tan(α)
+    4. Skalér displacement ind mod kamera-center
+    """
+    if center_px is None or cam_h <= marker_h or cam_h <= 0:
+        return center_px
+
+    # ── Displacement i warped px → cm ────────────────────────────────
+    sx = field_w / warped_w          # cm per pixel
+    sy = field_h / warped_h
+
+    dx_cm = (center_px[0] - cam_center_px[0]) * sx
+    dy_cm = (center_px[1] - cam_center_px[1]) * sy
+
+    # ── Afstand fra kamera-center til QR (Pythagoras) ────────────────
+    d = math.hypot(dx_cm, dy_cm)     # √(dx² + dy²) i cm
+
+    if d < 0.5:                      # direkte under kameraet
+        return center_px
+
+    # ── Vinkel + korrektion ──────────────────────────────────────────
+    alpha    = math.atan2(d, cam_h)                  # vinkel fra lodret
+    d_actual = (cam_h - marker_h) * math.tan(alpha)  # vandret afstand 18cm oppe
+    scale    = d_actual / d                          # < 1 → mod center
+
+    # ── Flyt positionen i warped px ──────────────────────────────────
+    return (
+        cam_center_px[0] + (center_px[0] - cam_center_px[0]) * scale,
+        cam_center_px[1] + (center_px[1] - cam_center_px[1]) * scale,
+    )
 
 
 def filter_detections_near_robot(detections, robot_center_px, radius=ROBOT_FILTER_RADIUS_PX):
@@ -155,7 +208,14 @@ def main():
             aruco_detector, frame, homography
         )
 
-        # ── 4. Detect balls and obstacles (YOLO on warped frame) ─────────
+        # ── 4. Correct for marker height (18cm above floor) ─────────────
+        robot_center = correct_robot_height(
+            robot_center, CAMERA_CENTER_PX,
+            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+        )
+
+        # ── 5. Detect balls and obstacles (YOLO on warped frame) ─────────
         detections = detect_objects(object_model, warped)
         detections = filter_detections_near_robot(detections, robot_center)
 

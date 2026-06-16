@@ -32,7 +32,7 @@ AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
 AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
 
 WALL_MARGIN_PX = 30         # Ball this close to a wall triggers wall approach.
-STAGING_DISTANCE_PX = 60    # How far back from the ball the staging point is.
+STAGING_DISTANCE_PX = 110    # How far back from the ball the staging point is.
 
 
 # --- States -------------------------------------------------------------------

@@ -66,7 +66,7 @@ def draw_robot(frame, center, angle):
     cv2.circle(display, (cx, cy), 8, (0, 255, 0), -1)
 
     # Draw heading arrow
-    length = 40
+    length = 50
     end_x = int(cx + length * np.cos(np.radians(angle)))
     end_y = int(cy + length * np.sin(np.radians(angle)))
     cv2.arrowedLine(display, (cx, cy), (end_x, end_y), (0, 255, 0), 2, tipLength=0.3)

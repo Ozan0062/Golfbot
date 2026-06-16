@@ -47,6 +47,8 @@ server.bind((HOST, PORT))
 server.listen()
 print("Robot ready, listening on port", PORT)
 
+claw.collect_ball()
+
 while True:
     conn, addr = server.accept()
     with conn:

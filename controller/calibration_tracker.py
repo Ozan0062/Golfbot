@@ -23,5 +23,6 @@ class CalibrationTracker:
 # One instance per motion type, shared across the state machine and calibration manager.
 from config import PIXELS_PER_ROTATION, DEGREES_PER_ROTATION
 
-calibration_pixels = CalibrationTracker(PIXELS_PER_ROTATION)
-calibration_angle  = CalibrationTracker(DEGREES_PER_ROTATION)
+calibration_pixels      = CalibrationTracker(PIXELS_PER_ROTATION)
+calibration_angle_left  = CalibrationTracker(DEGREES_PER_ROTATION)
+calibration_angle_right = CalibrationTracker(DEGREES_PER_ROTATION)

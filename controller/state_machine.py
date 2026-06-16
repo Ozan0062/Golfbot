@@ -6,7 +6,7 @@ import time
 
 import controller.ev3_controller as robot
 from controller.calibration_manager import CalibrationManager
-from controller.calibration_tracker import calibration_angle, calibration_pixels
+from controller.calibration_tracker import calibration_angle_left, calibration_angle_right, calibration_pixels
 from controller.commands import Command
 from controller.navigation import (
     angle_to_target, angle_error, path_is_clear, obstacle_waypoint,
@@ -66,7 +66,8 @@ class GolfBotController:
         self._avoid_target   = None   # type tuple
         self._is_wall_ball   = False  # True when current target is near a wall/corner
         print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
-              f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
+              f"cal=L{calibration_angle_left.ratio:.1f}/R{calibration_angle_right.ratio:.1f}deg/rot  "
+              f"{calibration_pixels.ratio:.1f}px/rot")
 
     # -- Main entry point (called once per camera frame) -----------------------
 
@@ -328,7 +329,7 @@ class GolfBotController:
         self._pose.invalidate()
 
     def _execute_turn(self, pose, rotations, direction):
-        self._cal.record_turn(pose.angle, rotations)
+        self._cal.record_turn(pose.angle, rotations, direction.name)
         robot.turn(rotations, direction.name)
         self._pose.invalidate()
 
@@ -360,4 +361,5 @@ def _px_to_rotations(drive_px):
 
 
 def _angle_to_rotations(heading_error):
-    return abs(heading_error) / calibration_angle.ratio * TURN_DAMPING
+    tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
+    return abs(heading_error) / tracker.ratio * TURN_DAMPING

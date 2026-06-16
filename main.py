@@ -60,11 +60,13 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     Detect the ArUco marker on the raw (un-warped) frame, then project
     the robot's centre and heading into warped top-down coordinates.
 
-    Returns (center_px, angle_deg) or (None, None).
+    Returns (center_px, forward_px, angle_deg) or (None, None, None).
+    forward_px is needed so correct_robot_height can correct both points
+    and recompute the angle — without this, the angle is off at field edges.
     """
     center_raw, angle_raw = detect_robot(aruco_detector, raw_frame)
     if center_raw is None:
-        return None, None
+        return None, None, None
 
     # Project two points: the marker centre and a point 50px ahead along the heading.
     # The angle between them in warped space gives the warped heading.
@@ -75,12 +77,13 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     pts = np.array([[center_raw, forward_raw]], dtype=np.float32)
     warped_pts = cv2.perspectiveTransform(pts, homography_matrix)[0]
 
-    center = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-    angle  = math.degrees(math.atan2(
-        warped_pts[1][1] - warped_pts[0][1],
-        warped_pts[1][0] - warped_pts[0][0],
+    center  = (float(warped_pts[0][0]), float(warped_pts[0][1]))
+    forward = (float(warped_pts[1][0]), float(warped_pts[1][1]))
+    angle   = math.degrees(math.atan2(
+        forward[1] - center[1],
+        forward[0] - center[0],
     ))
-    return center, angle
+    return center, forward, angle
 
 
 def correct_robot_height(center_px, cam_center_px, cam_h, marker_h,
@@ -236,16 +239,29 @@ def main():
         h, w = warped.shape[:2]
 
         # ── 3. Detect robot pose (ArUco on raw frame → warped coords) ───
-        robot_center, robot_angle = detect_robot_pose_in_warped_coords(
+        robot_center, robot_forward, robot_angle = detect_robot_pose_in_warped_coords(
             aruco_detector, frame, homography
         )
 
         # ── 4. Correct for marker height (18cm above floor) ─────────────
+        #    Apply to both center and forward point, then recompute angle.
+        #    Without this the angle is off at field edges because the radial
+        #    scaling toward camera center shifts the two points by different amounts.
         robot_center = correct_robot_height(
             robot_center, CAMERA_CENTER_PX,
             CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
             w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
         )
+        robot_forward = correct_robot_height(
+            robot_forward, CAMERA_CENTER_PX,
+            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+        )
+        if robot_center is not None and robot_forward is not None:
+            robot_angle = math.degrees(math.atan2(
+                robot_forward[1] - robot_center[1],
+                robot_forward[0] - robot_center[0],
+            ))
 
         # ── 5. Detect balls and obstacles (YOLO on warped frame) ─────────
         detections = detect_objects(object_model, warped)

@@ -17,6 +17,7 @@ class Claw:
             brake=True,
             block=True
         )
+        self.motor.stop(stop_action='hold')
         return True
 
     def open_claw(self, speedDPS=300):

@@ -11,13 +11,15 @@ Commands the brick must handle (ev3_server.py):
     STOP             — stop all drive motors (fire-and-forget)
     COLLECT          — run claw to pick up ball (blocking on brick), reply "DONE"
     RELEASE          — open gate to release ball (blocking on brick), reply "DONE"
+    GATE_OPEN        — open gate (blocking on brick), reply "DONE"
+    GATE_CLOSE       — close gate (blocking on brick), reply "DONE"
 """
 
 import socket
 
 HOST = "10.233.49.35"   # EV3 IP over WiFi
 PORT = 5000
-RECV_TIMEOUT_S = 15.0   # Seconds to wait for a response before giving up (for blocking commands)
+RECV_TIMEOUT_S = 60.0   # Seconds to wait for a response before giving up (for blocking commands)
 
 
 # ---------------------------------------------------------------------------
@@ -89,3 +91,13 @@ def collect():
 def release():
     """Open gate to release ball at goal. Blocking."""
     _send_recv("RELEASE")
+
+
+def gate_open():
+    """Open the gate. Blocking."""
+    _send_recv("GATE_OPEN")
+
+
+def gate_close():
+    """Close the gate. Blocking."""
+    _send_recv("GATE_CLOSE")

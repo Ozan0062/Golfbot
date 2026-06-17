@@ -1,20 +1,18 @@
 """
-route_manager.py — TSP route state for ball collection.
+route_manager.py — Nearest-ball selection for ball collection.
 
 COLLECTION ORDER (enforced):
-  1. All white balls first (Christofides-optimized order)
+  1. All white balls first (nearest from current robot position, re-evaluated each SEEK)
   2. Orange ball last (only targeted after all whites are collected)
   3. Then the state machine transitions to DRIVE_GOAL
 
-The state machine calls get_target() once per SEEK entry and advance()
-after each collect. It never touches _route directly.
+The state machine calls get_target() on every SEEK entry to always pick
+the closest remaining ball. advance() is a no-op kept for interface compat.
 """
 
 import math
 from dataclasses import dataclass
 from typing import Optional
-
-from controller.tsp_christofides import christofides_route
 
 
 @dataclass
@@ -27,8 +25,7 @@ class RouteTarget:
 class RouteManager:
 
     def __init__(self):
-        self._route:       list = []   # ordered cm positions (white balls only)
-        self._white_count: int  = 0    # white balls when route was last computed
+        pass
 
     # -------------------------------------------------------------------------
     # Public API
@@ -36,20 +33,22 @@ class RouteManager:
 
     def get_target(self, robot_pos: tuple, robot_px: tuple, world: dict) -> Optional[RouteTarget]:
         """
-        Return the next RouteTarget, or None if no balls remain.
+        Return the nearest RouteTarget, re-evaluated fresh each call.
         """
         white_balls, white_balls_px = _gather_white(world)
         orange_cm  = world.get("ob")
         orange_px  = world.get("ob_px")
 
-        # ── Phase 1: white balls ─────────────────────────────────────────
+        # ── Phase 1: white balls — always pick the nearest one ───────────
         if white_balls:
-            if not self._route or len(white_balls) > self._white_count:
-                self._compute_white_route(robot_pos, white_balls)
-
-            target_cm = self._route[0]
-            target_px = _nearest_px(target_cm, white_balls, white_balls_px)
+            idx = min(
+                range(len(white_balls)),
+                key=lambda i: _dist(robot_px, white_balls_px[i]) if robot_px and white_balls_px else float("inf"),
+            )
+            target_cm = white_balls[idx]
+            target_px = white_balls_px[idx] if white_balls_px else None
             dist_px   = _dist(robot_px, target_px) if robot_px and target_px else 0.0
+            print(f"[ROUTE] Nearest white ball: idx={idx}  dist={dist_px:.0f}px")
             return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
         # ── Phase 2: orange ball (all whites collected) ──────────────────
@@ -62,34 +61,12 @@ class RouteManager:
         return None
 
     def advance(self):
-        """Call after a successful collect to move to the next target."""
-        if self._route:
-            self._route.pop(0)
-        remaining = len(self._route)
-        print(f"[ROUTE] Advanced.  {remaining} white target(s) remaining.")
+        """No-op: nearest-ball selection needs no route list to advance."""
+        pass
 
     def clear(self):
-        """Call when no balls are visible so the route is rebuilt fresh next time."""
-        self._route       = []
-        self._white_count = 0
-
-    # -------------------------------------------------------------------------
-    # Internal
-    # -------------------------------------------------------------------------
-
-    def _compute_white_route(self, robot_pos: tuple, white_balls: list):
-        """Run Christofides on white balls only. Orange is handled separately."""
-        points = [robot_pos] + white_balls     # index 0 = robot
-        order  = christofides_route(points)
-
-        self._route = [
-            white_balls[i - 1]
-            for i in order
-            if i != 0 and 1 <= i <= len(white_balls)
-        ]
-        self._white_count = len(white_balls)
-        print(f"[ROUTE] Christofides over {len(white_balls)} white ball(s) → "
-              f"order {[i for i in order if i != 0]}")
+        """No-op: no cached route to clear."""
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -102,14 +79,6 @@ def _gather_white(world: dict) -> tuple:
         world.get("white_balls", []),
         world.get("white_balls_px", []),
     )
-
-
-def _nearest_px(target_cm: tuple, all_balls: list, all_balls_px: list) -> Optional[tuple]:
-    """Return the pixel position of the ball whose cm position is closest to target_cm."""
-    if not all_balls:
-        return None
-    idx = min(range(len(all_balls)), key=lambda i: _dist(all_balls[i], target_cm))
-    return all_balls_px[idx]
 
 
 def _dist(a: tuple, b: tuple) -> float:

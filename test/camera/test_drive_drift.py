@@ -6,30 +6,26 @@ robot's pose before and after the drive, then prints the lateral drift, heading
 drift, and actual distance vs requested distance.
 
 Usage:
-    python -m test.test_drive_drift
+    python -m test.camera.test_drive_drift
 
 The robot must be on the field with ArUco visible before this starts.
 """
 
 import sys
+import os
 import time
 import math
 
-sys.path.append(".")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-import cv2
-import numpy as np
 from vision.camera import open_stream
 from vision.field import load_field_model, detect_corners, sort_corners, warp_field
-from vision.aruco import create_detector, detect_robot, draw_robot
+from vision.aruco import create_detector
 from vision.calibration import load_calibration, build_undistort_maps, remap
-from vision.tracker import robot_px_to_cm
+from vision.tracker import robot_px_to_cm, get_true_robot_pose
 from controller.calibration_tracker import calibration_pixels
 import controller.ev3_controller as robot
-from config import (CAMERA_WIDTH, CAMERA_HEIGHT, CAMERA_CENTER_PX,
-                    CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
-                    FIELD_WIDTH_CM, FIELD_HEIGHT_CM)
-from main import correct_robot_height
+from config import CAMERA_WIDTH, CAMERA_HEIGHT
 
 
 DRIVE_PX = 300
@@ -63,35 +59,11 @@ def get_pose(stream, field_model, aruco_detector, undist_maps, last_corners):
         warped, M = warp_field(frame, last_corners)
         h, w = warped.shape[:2]
 
-        # Detect ArUco on the raw (undistorted) frame, project into warped space
-        raw_center, raw_angle = detect_robot(aruco_detector, frame)
-        if raw_center is not None:
-            fwd_raw = (
-                raw_center[0] + 50 * math.cos(math.radians(raw_angle)),
-                raw_center[1] + 50 * math.sin(math.radians(raw_angle)),
-            )
-            pts = np.array([[raw_center, fwd_raw]], dtype=np.float32)
-            warped_pts = cv2.perspectiveTransform(pts, M)[0]
-            center_px = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-            forward_px = (float(warped_pts[1][0]), float(warped_pts[1][1]))
-
-            # Correct for marker height (18cm above floor)
-            center_px = correct_robot_height(
-                center_px, CAMERA_CENTER_PX,
-                CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
-                w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-            )
-            forward_px = correct_robot_height(
-                forward_px, CAMERA_CENTER_PX,
-                CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
-                w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-            )
-            if center_px is not None and forward_px is not None:
-                angle = math.degrees(math.atan2(
-                    forward_px[1] - center_px[1],
-                    forward_px[0] - center_px[0],
-                ))
-                return center_px, angle, last_corners
+        center_px, angle = get_true_robot_pose(
+            aruco_detector, frame, M, w, h
+        )
+        if center_px is not None:
+            return center_px, angle, last_corners
 
         time.sleep(0.05)
 

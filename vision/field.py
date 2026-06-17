@@ -73,6 +73,17 @@ def warp_field(frame, corners, output_width=WARPED_WIDTH, output_height=WARPED_H
     return warped, M
 
 
+def detect_field(field_model, frame, last_corners):
+    """
+    Detect field corners in the current frame.
+    Returns updated corners (or the previous ones if detection fails this frame).
+    """
+    corners = detect_corners(field_model, frame)
+    if len(corners) >= 4:
+        return sort_corners(corners)
+    return last_corners
+
+
 # ── Standalone test ─────────────────────────────────
 #Opens camera, detects field corners live, draws them, warps on 'w' press.
 if __name__ == "__main__":

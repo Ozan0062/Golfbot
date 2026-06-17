@@ -5,200 +5,30 @@ Main loop:
   1. Grab a camera frame
   2. Undistort lens distortion (if calibrated)
   3. Detect field corners → perspective-warp to top-down view
-  4. Detect robot pose via ArUco marker (on raw frame, projected into warped coords)
-  5. Correct robot position for marker height (18cm above floor)
-  6. Detect balls and obstacles via YOLO (on warped frame)
-  7. Build a "world" dict with all positions in both px and cm
-  8. Feed world into the state machine → get a Command back
-  9. Draw debug overlay and display
+  4. Detect robot pose (ArUco → warped → height-corrected)
+  5. Detect balls and obstacles via YOLO (on warped frame)
+  6. Build a "world" dict with all positions in both px and cm
+  7. Feed world into the state machine → get a Command back
+  8. Draw debug overlay and display
 """
 
-import math
 import cv2
-import numpy as np
 import time
 
 from golfbot_logger import setup_logging, get_logger
 
-from vision.camera   import open_stream
-from vision.field    import load_field_model, detect_corners, sort_corners, warp_field
-from vision.detector import load_object_model, detect_objects, draw_detections
-from vision.tracker  import pixels_to_cm, extract_objects, robot_px_to_cm
-from vision.aruco    import create_detector, detect_robot, draw_robot
-from vision.calibration import load_calibration, build_undistort_maps, remap
+from vision.camera      import open_stream
+from vision.field       import load_field_model, warp_field, detect_field
+from vision.detector    import load_object_model, detect_objects, draw_debug_overlay
+from vision.tracker     import get_true_robot_pose, filter_detections_near_robot, build_world_dict
+from vision.aruco       import create_detector
+from vision.calibration import load_calibration, build_undistort_maps, undistort_frame
 
 from controller.state_machine import GolfBotController
-from config import (ROBOT_FILTER_RADIUS_PX, CAMERA_WIDTH, CAMERA_HEIGHT,
-                     CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM, CAMERA_CENTER_PX,
-                     FIELD_WIDTH_CM, FIELD_HEIGHT_CM, WARPED_WIDTH, WARPED_HEIGHT)
+from config import CAMERA_WIDTH, CAMERA_HEIGHT
 
 log = get_logger(__name__)
 
-
-# ─── Vision pipeline helpers ─────────────────────────────────────────────────
-
-def undistort_frame(frame, undist_maps):
-    """Apply lens correction if calibration data is available."""
-    if undist_maps is not None:
-        return remap(frame, *undist_maps)
-    return frame
-
-
-def detect_field(field_model, frame, last_corners):
-    """
-    Detect field corners in the current frame.
-    Returns updated corners (or the previous ones if detection fails this frame).
-    """
-    corners = detect_corners(field_model, frame)
-    if len(corners) >= 4:
-        return sort_corners(corners)
-    return last_corners
-
-
-def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_matrix):
-    """
-    Detect the ArUco marker on the raw (un-warped) frame, then project
-    the robot's centre and heading into warped top-down coordinates.
-
-    Returns (center_px, forward_px, angle_deg) or (None, None, None).
-    forward_px is needed so correct_robot_height can correct both points
-    and recompute the angle — without this, the angle is off at field edges.
-    """
-    center_raw, angle_raw = detect_robot(aruco_detector, raw_frame)
-    if center_raw is None:
-        return None, None, None
-
-    # Project two points: the marker centre and a point 50px ahead along the heading.
-    # The angle between them in warped space gives the warped heading.
-    forward_raw = (
-        center_raw[0] + 50 * math.cos(math.radians(angle_raw)),
-        center_raw[1] + 50 * math.sin(math.radians(angle_raw)),
-    )
-    pts = np.array([[center_raw, forward_raw]], dtype=np.float32)
-    warped_pts = cv2.perspectiveTransform(pts, homography_matrix)[0]
-
-    center  = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-    forward = (float(warped_pts[1][0]), float(warped_pts[1][1]))
-    angle   = math.degrees(math.atan2(
-        forward[1] - center[1],
-        forward[0] - center[0],
-    ))
-    return center, forward, angle
-
-
-def correct_robot_height(center_px, cam_center_px, cam_h, marker_h,
-                         warped_w, warped_h, field_w, field_h):
-    """
-    Korriger robot-positionen for at QR-koden sidder 18 cm over gulvet.
-
-    Geometri (set fra siden):
-
-        Kamera (C)
-        |╲
-        |  ╲          ← synsvinkel α
-        H    ╲
-        |      ╲
-        |  18cm QR ← markør oppe
-        |   |
-        ────┴──── gulv
-     (312,303)  robot-base (det vi vil finde)
-
-    1. Omregn displacement fra kamera-center til cm (Pythagoras: d = √(dx² + dy²))
-    2. Vinkel fra lodret: α = atan(d / H)
-    3. Vandret afstand til QR 18 cm oppe: d_actual = (H − 18) · tan(α)
-    4. Skalér displacement ind mod kamera-center
-    """
-    if center_px is None or cam_h <= marker_h or cam_h <= 0:
-        return center_px
-
-    # ── Displacement i warped px → cm ────────────────────────────────
-    sx = field_w / warped_w          # cm per pixel
-    sy = field_h / warped_h
-
-    dx_cm = (center_px[0] - cam_center_px[0]) * sx
-    dy_cm = (center_px[1] - cam_center_px[1]) * sy
-
-    # ── Afstand fra kamera-center til QR (Pythagoras) ────────────────
-    d = math.hypot(dx_cm, dy_cm)     # √(dx² + dy²) i cm
-
-    if d < 0.5:                      # direkte under kameraet
-        return center_px
-
-    # ── Vinkel + korrektion ──────────────────────────────────────────
-    alpha    = math.atan2(d, cam_h)                  # vinkel fra lodret
-    d_actual = (cam_h - marker_h) * math.tan(alpha)  # vandret afstand 18cm oppe
-    scale    = d_actual / d                          # < 1 → mod center
-
-    # ── Flyt positionen i warped px ──────────────────────────────────
-    return (
-        cam_center_px[0] + (center_px[0] - cam_center_px[0]) * scale,
-        cam_center_px[1] + (center_px[1] - cam_center_px[1]) * scale,
-    )
-
-
-def filter_detections_near_robot(detections, robot_center_px, radius=ROBOT_FILTER_RADIUS_PX):
-    """
-    Remove ball detections whose pixel centre is within <radius> px of the robot's ArUco marker.
-    """
-    if robot_center_px is None:
-        return detections
-    rx, ry = robot_center_px
-    return [
-        d for d in detections
-        if d["class_name"] not in ("wb", "ob")
-        or math.dist(d["center"], (rx, ry)) > radius
-    ]
-
-
-def build_world_dict(detections, robot_center, robot_angle, image_w, image_h):
-    """
-    Combine YOLO detections and ArUco pose into a single world dict.
-    Contains both cm (for angle/TSP maths) and px (for drive distances).
-    """
-    world                = extract_objects(pixels_to_cm(detections, image_w, image_h))
-    world["robot"]       = robot_px_to_cm(robot_center, image_w, image_h)
-    world["robot_px"]    = robot_center
-    world["robot_angle"] = robot_angle
-    return world
-
-
-def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name, command_name, locked_target=None):
-    """Draw detections, robot marker, and current state on the frame."""
-    debug = draw_detections(warped, detections)
-    debug = draw_robot(debug, robot_center, robot_angle)
-    
-    if locked_target is not None:
-        px = locked_target.px
-        # Magenta square around target
-        cv2.rectangle(debug, (int(px[0]) - 20, int(px[1]) - 20),
-                      (int(px[0]) + 20, int(px[1]) + 20), (255, 0, 255), 2)
-                      
-        if robot_center is not None and robot_angle is not None:
-            # Yellow square around robot
-            rx, ry = int(robot_center[0]), int(robot_center[1])
-            cv2.rectangle(debug, (rx - 25, ry - 25), (rx + 25, ry + 25), (0, 255, 255), 2)
-            
-            # Calculate distance and angle error
-            dx = px[0] - rx
-            dy = px[1] - ry
-            dist_px = math.hypot(dx, dy)
-            target_heading = math.degrees(math.atan2(dy, dx))
-            heading_error = (target_heading - robot_angle + 180) % 360 - 180
-            
-            # Draw line between them
-            cv2.line(debug, (rx, ry), (int(px[0]), int(px[1])), (0, 255, 255), 1)
-            
-            # Show distance and angle near robot
-            info_str = f"Dist: {dist_px:.0f}px | Ang: {heading_error:.1f}deg"
-            cv2.putText(debug, info_str, (rx - 50, ry - 35),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
-
-    cv2.putText(debug, f"{state_name}  {command_name}",
-                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    return debug
-
-
-# ─── Main loop ───────────────────────────────────────────────────────────────
 
 def main():
     setup_logging(level="INFO")
@@ -238,32 +68,12 @@ def main():
         warped, homography = warp_field(frame, last_corners)
         h, w = warped.shape[:2]
 
-        # ── 3. Detect robot pose (ArUco on raw frame → warped coords) ───
-        robot_center, robot_forward, robot_angle = detect_robot_pose_in_warped_coords(
-            aruco_detector, frame, homography
+        # ── 3. Detect robot pose (ArUco → warped → height-corrected) ────
+        robot_center, robot_angle = get_true_robot_pose(
+            aruco_detector, frame, homography, w, h
         )
 
-        # ── 4. Correct for marker height (18cm above floor) ─────────────
-        #    Apply to both center and forward point, then recompute angle.
-        #    Without this the angle is off at field edges because the radial
-        #    scaling toward camera center shifts the two points by different amounts.
-        robot_center = correct_robot_height(
-            robot_center, CAMERA_CENTER_PX,
-            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
-            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-        )
-        robot_forward = correct_robot_height(
-            robot_forward, CAMERA_CENTER_PX,
-            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
-            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-        )
-        if robot_center is not None and robot_forward is not None:
-            robot_angle = math.degrees(math.atan2(
-                robot_forward[1] - robot_center[1],
-                robot_forward[0] - robot_center[0],
-            ))
-
-        # ── 5. Detect balls and obstacles (YOLO on warped frame) ─────────
+        # ── 4. Detect balls and obstacles (YOLO on warped frame) ─────────
         detections = detect_objects(object_model, warped)
         detections = filter_detections_near_robot(detections, robot_center)
 

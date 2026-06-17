@@ -1,10 +1,10 @@
-from ev3dev2.motor import MoveTank, SpeedPercent, OUTPUT_A, OUTPUT_D
+from ev3dev2.motor import MoveSteering, SpeedPercent, OUTPUT_A, OUTPUT_D
 
 # ---------------------------------------------------------------------------
 # Motor setup
 # ---------------------------------------------------------------------------
 
-tank = MoveTank(OUTPUT_D, OUTPUT_A)
+steer = MoveSteering(OUTPUT_D, OUTPUT_A)
 
 DRIVE_SPEED_PCT = 70
 TURN_SPEED_PCT  = 50
@@ -17,18 +17,20 @@ MOTOR_DIR = -1
 # ---------------------------------------------------------------------------
 
 def drive_forward(rotations: float):
-    tank.on_for_rotations(SpeedPercent(MOTOR_DIR * DRIVE_SPEED_PCT), SpeedPercent(MOTOR_DIR * DRIVE_SPEED_PCT), rotations)
+    steer.on_for_rotations(0, SpeedPercent(MOTOR_DIR * DRIVE_SPEED_PCT), rotations)
+    steer.wait_until_not_moving(timeout=None)
 
 def drive_backward(rotations: float):
-    tank.on_for_rotations(SpeedPercent(-MOTOR_DIR * DRIVE_SPEED_PCT), SpeedPercent(-MOTOR_DIR * DRIVE_SPEED_PCT), rotations)
+    steer.on_for_rotations(0, SpeedPercent(-MOTOR_DIR * DRIVE_SPEED_PCT), rotations)
+    steer.wait_until_not_moving(timeout=None)
 
 def turn_left(rotations: float):
-    # both wheels, opposite directions — left wheel back, right wheel forward
-    tank.on_for_rotations(SpeedPercent(-TURN_SPEED_PCT), SpeedPercent(TURN_SPEED_PCT), rotations)
+    steer.on_for_rotations(MOTOR_DIR * -100, SpeedPercent(MOTOR_DIR * TURN_SPEED_PCT), rotations)
+    steer.wait_until_not_moving(timeout=None)
 
 def turn_right(rotations: float):
-    # both wheels, opposite directions — left wheel forward, right wheel back
-    tank.on_for_rotations(SpeedPercent(TURN_SPEED_PCT), SpeedPercent(-TURN_SPEED_PCT), rotations)
+    steer.on_for_rotations(MOTOR_DIR * 100, SpeedPercent(MOTOR_DIR * TURN_SPEED_PCT), rotations)
+    steer.wait_until_not_moving(timeout=None)
 
 def stop():
-    tank.off(brake=True)
+    steer.off(brake=True)

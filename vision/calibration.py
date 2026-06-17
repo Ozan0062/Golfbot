@@ -143,6 +143,13 @@ def remap(frame, map1, map2):
     return cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
 
 
+def undistort_frame(frame, undist_maps):
+    """Apply lens correction if calibration data is available."""
+    if undist_maps is not None:
+        return remap(frame, *undist_maps)
+    return frame
+
+
 # ── CLI ─────────────────────────────────────────────
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in ("capture", "calibrate", "test"):

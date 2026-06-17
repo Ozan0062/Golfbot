@@ -2,7 +2,7 @@
 test_mock_run.py — Full state-machine test without the robot.
 
 Run from project root:
-    python -m test.test_mock_run
+    python -m test.computer.test_mock_run
 
 Patches ev3_controller so no TCP connection is needed.
 Feeds the controller a scripted sequence of world dicts and prints every

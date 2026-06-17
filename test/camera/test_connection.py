@@ -3,6 +3,9 @@ test_connection.py — quick sanity check.
 Opens the camera and reads the gyro from the robot.
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import cv2
 from vision.camera import open_camera, grab_frame, release
 from controller import ev3_controller as robot

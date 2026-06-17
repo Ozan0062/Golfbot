@@ -9,3 +9,4 @@ yolo11n.pt
 __pycache__/
 .pytest_cache/
 *.pyc
+*.log

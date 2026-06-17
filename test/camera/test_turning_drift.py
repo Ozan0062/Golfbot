@@ -14,24 +14,23 @@ robot's local frame satisfies:
 Solving this 2×2 system yields the offset.
 
 Usage:
-    python test/test_turning_drift.py
-    python test/test_turning_drift.py --degrees 90
+    python -m test.camera.test_turning_drift
+    python -m test.camera.test_turning_drift --degrees 90
 """
 
 import sys
+import os
 import time
 import math
 import argparse
 
-sys.path.append(".")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-import cv2
-import numpy as np
 from vision.camera import open_stream
 from vision.field import load_field_model, detect_corners, sort_corners, warp_field
-from vision.aruco import create_detector, detect_robot
+from vision.aruco import create_detector
 from vision.calibration import load_calibration, build_undistort_maps, remap
-from vision.tracker import robot_px_to_cm
+from vision.tracker import robot_px_to_cm, detect_robot_pose_in_warped_coords
 from controller.calibration_tracker import calibration_angle_left
 import controller.ev3_controller as robot
 from config import CAMERA_WIDTH, CAMERA_HEIGHT
@@ -65,19 +64,10 @@ def get_pose(stream, field_model, aruco_detector, undist_maps, last_corners):
 
         warped, M = warp_field(frame, last_corners)
 
-        raw_center, raw_angle = detect_robot(aruco_detector, frame)
-        if raw_center is not None:
-            fwd_raw = (
-                raw_center[0] + 50 * math.cos(math.radians(raw_angle)),
-                raw_center[1] + 50 * math.sin(math.radians(raw_angle)),
-            )
-            pts = np.array([[raw_center, fwd_raw]], dtype=np.float32)
-            warped_pts = cv2.perspectiveTransform(pts, M)[0]
-            center_px = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-            angle = math.degrees(math.atan2(
-                warped_pts[1][1] - warped_pts[0][1],
-                warped_pts[1][0] - warped_pts[0][0],
-            ))
+        center_px, _forward, angle = detect_robot_pose_in_warped_coords(
+            aruco_detector, frame, M
+        )
+        if center_px is not None:
             return center_px, angle, last_corners
 
         time.sleep(0.05)
@@ -114,7 +104,7 @@ def calc_offset(start_px, start_angle, end_px, end_angle):
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate QR→centre offset from turning drift")
-    parser.add_argument("--degrees", type=float, default=360,
+    parser.add_argument("--degrees", type=float, default=200,
                         help="Degrees to turn (default 360)")
     args = parser.parse_args()
 

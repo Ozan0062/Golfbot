@@ -20,16 +20,16 @@ ROBOT_MARKER_HEIGHT_CM = 18.0       # ArUco marker height above field
 # Det punkt på banen kameraet hænger direkte over (warped pixels).
 # Skaleret fra (312, 303) i 640×480 → 900×600.
 # MÅL GERNE IGEN i det nye 900×600 warped billede for præcision.
-CAMERA_CENTER_PX = (467, 347)
+CAMERA_CENTER_PX = (451, 356)
 
 # Navigation safety
 # Robot centre must stay this far from field edges while collecting balls.
 # Set this to at least half the robot's widest dimension.
 FIELD_SAFETY_MARGIN_CM = 15.0
 
-# Goal position — hardcoded: far right, vertically centered
-GOAL_POSITION_CM = (FIELD_WIDTH_CM, FIELD_HEIGHT_CM / 2)
-GOAL_POSITION_PX = (WARPED_WIDTH, WARPED_HEIGHT // 2)
+# Goal position — left wall, vertically centered
+GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
+GOAL_POSITION_PX = (0, WARPED_HEIGHT // 2)
 
 import os
 

@@ -25,6 +25,7 @@ from vision.aruco       import create_detector
 from vision.calibration import load_calibration, build_undistort_maps, undistort_frame
 
 from controller.state_machine import GolfBotController
+import controller.ev3_controller as robot
 from config import CAMERA_WIDTH, CAMERA_HEIGHT
 
 log = get_logger(__name__)
@@ -46,6 +47,10 @@ def main():
     if mtx is not None:
         undist_maps = build_undistort_maps(mtx, dist, (CAMERA_WIDTH, CAMERA_HEIGHT))
         log.info("Lens calibration loaded — undistort maps built (%dx%d)", CAMERA_WIDTH, CAMERA_HEIGHT)
+
+    # Run collect once on startup (open/close claw before main loop)
+    log.info("Startup collect...")
+    robot.collect()
 
     controller   = GolfBotController()
     last_corners = None

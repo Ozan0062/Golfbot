@@ -71,6 +71,66 @@ class EV3ProtocolStrategyTests(unittest.TestCase):
 
         self.assertEqual(reply, "")
 
+    def test_send_recv_uses_socket_success_path(self):
+        class FakeSocket:
+            def __init__(self):
+                self.timeout = None
+                self.connected_to = None
+                self.sent = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def settimeout(self, timeout):
+                self.timeout = timeout
+
+            def connect(self, address):
+                self.connected_to = address
+
+            def sendall(self, payload):
+                self.sent = payload
+
+            def recv(self, size):
+                return b"DONE"
+
+        fake_socket = FakeSocket()
+
+        with patch("controller.ev3_controller.socket.socket", return_value=fake_socket):
+            reply = ev3_controller._send_recv("FORWARD 1.0")
+
+        self.assertEqual(reply, "DONE")
+        self.assertEqual(fake_socket.sent, b"FORWARD 1.0")
+        self.assertEqual(fake_socket.connected_to, (ev3_controller.HOST, ev3_controller.PORT))
+
+    def test_send_uses_socket_success_path(self):
+        class FakeSocket:
+            def __init__(self):
+                self.connected_to = None
+                self.sent = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def connect(self, address):
+                self.connected_to = address
+
+            def sendall(self, payload):
+                self.sent = payload
+
+        fake_socket = FakeSocket()
+
+        with patch("controller.ev3_controller.socket.socket", return_value=fake_socket):
+            ev3_controller._send("STOP")
+
+        self.assertEqual(fake_socket.sent, b"STOP")
+        self.assertEqual(fake_socket.connected_to, (ev3_controller.HOST, ev3_controller.PORT))
+
 
 if __name__ == "__main__":
     unittest.main()

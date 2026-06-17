@@ -7,11 +7,15 @@ import math
 import unittest
 
 from controller.navigation import (
+    _point_to_segment_dist,
     angle_error,
     angle_to_target,
     classify_zone,
+    cm_to_pixels,
     obstacle_waypoint,
     path_is_clear,
+    staging_point,
+    wall_approach_angle,
 )
 
 
@@ -66,6 +70,30 @@ class NavigationUnitTests(unittest.TestCase):
         self.assertGreaterEqual(waypoint[1], clearance)
         self.assertLessEqual(waypoint[1], 600 - clearance)
         self.assertGreater(math.dist(waypoint, cross_px), 70)
+
+    def test_cm_to_pixels_scales_field_coordinates_to_warped_image(self):
+        self.assertEqual(cm_to_pixels((90.0, 60.0), 900, 600, 180.0, 120.0), (450.0, 300.0))
+
+    def test_wall_approach_angle_returns_wall_corner_and_open_angles(self):
+        self.assertEqual(wall_approach_angle(["top"]), -90.0)
+        self.assertEqual(wall_approach_angle(["bottom"]), 90.0)
+        self.assertEqual(wall_approach_angle(["left"]), 180.0)
+        self.assertEqual(wall_approach_angle(["right"]), 0.0)
+        self.assertEqual(wall_approach_angle(["top", "left"]), -135.0)
+        self.assertEqual(wall_approach_angle(["bottom", "right"]), 45.0)
+        self.assertIsNone(wall_approach_angle([]))
+
+    def test_staging_point_is_placed_behind_target_on_approach_axis(self):
+        self.assertAlmostEqual(staging_point((100, 100), 0.0, 40)[0], 60.0)
+        self.assertAlmostEqual(staging_point((100, 100), 0.0, 40)[1], 100.0)
+        self.assertAlmostEqual(staging_point((100, 100), -90.0, 40)[0], 100.0)
+        self.assertAlmostEqual(staging_point((100, 100), -90.0, 40)[1], 140.0)
+
+    def test_point_to_segment_distance_handles_zero_length_segment(self):
+        self.assertAlmostEqual(_point_to_segment_dist((3, 4), (0, 0), (0, 0)), 5.0)
+
+    def test_obstacle_waypoint_returns_none_for_zero_length_path(self):
+        self.assertIsNone(obstacle_waypoint((100, 100), (100, 100), (120, 120), 70, 900, 600))
 
 
 if __name__ == "__main__":

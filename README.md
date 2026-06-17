@@ -36,12 +36,11 @@ Golfbot/
 ├── controller/
 │   ├── state_machine.py             ← FSM: SEEK→AVOID→ALIGN→APPROACH→...→DONE
 │   ├── navigation.py                ← angle math, path clearance, wall/corner geometry
-│   ├── route_manager.py             ← ball ordering (Christofides TSP, white-first)
+│   ├── route_manager.py             ← ball selection (nearest white first, then orange)
 │   ├── ev3_controller.py            ← TCP commands to EV3
 │   ├── calibration_manager.py       ← runtime drive/turn calibration
 │   ├── calibration_tracker.py       ← EMA ratio tracking (px/rot, deg/rot)
 │   ├── pose_cache.py                ← caches robot pose between detections
-│   ├── tsp_christofides.py          ← 1.5-approx TSP solver
 │   ├── commands.py                  ← Command enum
 │   └── controller_guide.md          ← controller TLDR
 │

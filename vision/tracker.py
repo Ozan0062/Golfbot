@@ -192,7 +192,7 @@ def filter_detections_near_robot(detections, robot_center_px, radius=None):
 def build_world_dict(detections, robot_center, robot_angle, image_w, image_h):
     """
     Combine YOLO detections and ArUco pose into a single world dict.
-    Contains both cm (for angle/TSP maths) and px (for drive distances).
+    Contains both cm (for angle/bearing maths) and px (for drive distances).
     """
     world                = extract_objects(pixels_to_cm(detections, image_w, image_h))
     world["robot"]       = robot_px_to_cm(robot_center, image_w, image_h)

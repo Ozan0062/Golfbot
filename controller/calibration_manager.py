@@ -11,6 +11,9 @@ cal.consume(pose.px, pose.angle)
 
 from controller.calibration import measure_pixels_per_rotation, measure_degrees_per_rotation
 from controller.calibration_tracker import calibration_pixels, calibration_angle_left, calibration_angle_right
+from golfbot_logger import get_logger
+
+log = get_logger(__name__)
 
 
 MIN_DRIVE_ROTATIONS = 0.5   # ignore drive measurements below this
@@ -38,7 +41,7 @@ class CalibrationManager:
             if rotations >= MIN_DRIVE_ROTATIONS:
                 measured = measure_pixels_per_rotation(start_px, robot_px, rotations)
                 calibration_pixels.update(measured)
-                print(f"[CAL] px/rot → {calibration_pixels.ratio:.2f}")
+                log.debug("calibrated px/rot -> %.2f", calibration_pixels.ratio)
 
         if self._pending_turn is not None and robot_angle is not None:
             start_angle, rotations, direction = self._pending_turn
@@ -47,4 +50,4 @@ class CalibrationManager:
                 measured = measure_degrees_per_rotation(start_angle, robot_angle, rotations)
                 tracker = calibration_angle_left if direction == "LEFT" else calibration_angle_right
                 tracker.update(measured)
-                print(f"[CAL] deg/rot {direction} → {tracker.ratio:.2f}")
+                log.debug("calibrated deg/rot %s -> %.2f", direction, tracker.ratio)

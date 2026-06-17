@@ -17,6 +17,10 @@ Commands the brick must handle (ev3_server.py):
 
 import socket
 
+from golfbot_logger import get_logger
+
+log = get_logger(__name__)
+
 HOST = "10.233.49.35"   # EV3 IP over WiFi
 PORT = 5000
 RECV_TIMEOUT_S = 60.0   # Seconds to wait for a response before giving up (for blocking commands)
@@ -46,7 +50,7 @@ def _send_recv(command: str) -> str:
             s.sendall(command.encode())
             return s.recv(1024).decode()
     except (socket.timeout, OSError) as e:
-        print(f"[EV3] {command!r} failed: {e}")
+        log.error("EV3 command %r failed: %s", command, e)
         return ""
 
 

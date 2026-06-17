@@ -14,6 +14,10 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
+from golfbot_logger import get_logger
+
+log = get_logger(__name__)
+
 
 @dataclass
 class RouteTarget:
@@ -48,13 +52,13 @@ class RouteManager:
             target_cm = white_balls[idx]
             target_px = white_balls_px[idx] if white_balls_px else None
             dist_px   = _dist(robot_px, target_px) if robot_px and target_px else 0.0
-            print(f"[ROUTE] Nearest white ball: idx={idx}  dist={dist_px:.0f}px")
+            log.debug("Nearest white ball: idx=%d  dist=%.0f px", idx, dist_px)
             return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
         # ── Phase 2: orange ball (all whites collected) ──────────────────
         if orange_cm is not None and orange_px is not None:
             dist_px = _dist(robot_px, orange_px) if robot_px else 0.0
-            print("[ROUTE] All whites collected — targeting orange ball")
+            log.info("All white balls collected — going for the orange ball")
             return RouteTarget(cm=orange_cm, px=orange_px, dist_px=dist_px)
 
         # Nothing left

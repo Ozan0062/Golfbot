@@ -24,7 +24,7 @@ MIN_TURN_ROTATIONS = 0.25   # Ignore turns smaller than this.
 TURN_DAMPING = 0.6          # Reduce turn commands to prevent oscillation when close.
 
 COLLECT_RADIUS_PX = 90      # Accepted radius for collecting a ball.
-GOAL_THRESHOLD_PX = 80      # Close enough to goal to stop driving and release balls.
+GOAL_THRESHOLD_PX = 100      # Close enough to goal to stop driving and release balls.
 REVERSE_ROTATIONS = 1.5     # How far to reverse when no balls are visible.
 MAX_DRIVE_PX = 80           # Cap on drive distance per cycle to allow for course correction.
 
@@ -32,19 +32,14 @@ CROSS_CLEARANCE_PX = 70     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
 AVOID_ARRIVE_PX = 15        # Close enough to waypoint to consider it reached.
 
+WALL_APPROACH_DRIVE_PX = 40  # Max drive step when doing a wall/corner final approach (no turns).
 WALL_MARGIN_PX = 120       # Ball this close to a wall triggers wall approach.
 STAGING_DISTANCE_PX = 170    # How far back from the ball the staging point is.
                              # Must be >= WALL_MARGIN_PX / cos(45°) ≈ 170 so corner
                              # staging points land outside the margin on both axes.
 
-# 3-stage corner approach: robot funnels down the approach axis in three hops.
-# Each hop requires a smaller turn than the last — by the final stage the robot
-# is already on-axis and needs almost zero turn before the straight-in collect.
-CORNER_STAGE_DISTANCES_PX = (
-    STAGING_DISTANCE_PX * 3,   # ~510px  Stage 1: enter the approach corridor
-    STAGING_DISTANCE_PX * 2,   # ~340px  Stage 2: mid-axis correction
-    STAGING_DISTANCE_PX,       # ~170px  Stage 3: final staging (same as wall)
-)
+# 3 staging points: 3×, 2×, and 1× staging distance from the ball.
+CORNER_STAGE_DISTANCES_PX = (STAGING_DISTANCE_PX * 3, STAGING_DISTANCE_PX * 2, STAGING_DISTANCE_PX)
 FIELD_EDGE_MARGIN_PX = 30    # Clamp corner waypoints this far from field edges.
 
 
@@ -75,6 +70,7 @@ class GolfBotController:
         self._locked_target    = None   # type RouteTarget | None
         self._avoid_target     = None   # type tuple | None
         self._corner_waypoints = []     # remaining staged corner waypoints (AVOID chains through these)
+        self._corner_approach_angle = None  # approach angle for current corner (deg), for debug
         self._is_wall_ball     = False  # True when current target is near a wall/corner
         self._strict_align     = False  # True when within collect radius — enforce 2° hard
         print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
@@ -165,31 +161,42 @@ class GolfBotController:
                     WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
                 )
                 if waypoints:
-                    self._avoid_target     = waypoints[0]
-                    self._corner_waypoints = waypoints[1:]
+                    self._avoid_target          = waypoints[0]
+                    self._corner_waypoints      = waypoints[1:]
+                    self._corner_approach_angle = angle
                     labels = "  →  ".join(f"({w[0]:.0f},{w[1]:.0f})px"
                                           for w in waypoints)
                     print(f"[SEEK] corner ball (walls={walls}) -- "
                           f"{len(waypoints)}-stage approach: {labels}")
                     self._transition(State.AVOID)
                     return Command.STOP
-                # Already at final staging point — fall through to ALIGN
-                print(f"[SEEK] Already at corner staging point for walls={walls}")
+                # Already at final staging point — drive straight in, no turns
+                print(f"[SEEK] Already at corner staging point for walls={walls} -- straight approach")
+                self._transition(State.APPROACH)
+                return Command.STOP
 
         elif zone == "wall":
             self._is_wall_ball = True
             angle = wall_approach_angle(walls)
             if angle is not None:
-                sp = staging_point(target.px, angle, STAGING_DISTANCE_PX)
-                dist_to_staging = _distance_px(pose.px, sp)
-                if dist_to_staging > AVOID_ARRIVE_PX:
-                    self._avoid_target     = sp
-                    self._corner_waypoints = []
+                waypoints = _corner_approach_waypoints(
+                    pose.px, target.px, angle,
+                    CORNER_STAGE_DISTANCES_PX,
+                    WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
+                )
+                if waypoints:
+                    self._avoid_target          = waypoints[0]
+                    self._corner_waypoints      = waypoints[1:]
+                    self._corner_approach_angle = angle
+                    labels = "  →  ".join(f"({w[0]:.0f},{w[1]:.0f})px"
+                                          for w in waypoints)
                     print(f"[SEEK] wall ball (walls={walls}) -- "
-                          f"staging at ({sp[0]:.0f},{sp[1]:.0f})px")
+                          f"{len(waypoints)}-stage approach: {labels}")
                     self._transition(State.AVOID)
                     return Command.STOP
-                print(f"[SEEK] Already at staging point for wall ball")
+                print(f"[SEEK] Already at wall staging point for walls={walls} -- straight approach")
+                self._transition(State.APPROACH)
+                return Command.STOP
         else:
             self._is_wall_ball     = False
             self._corner_waypoints = []
@@ -213,10 +220,30 @@ class GolfBotController:
         if dist_px <= AVOID_ARRIVE_PX:
             if self._corner_waypoints:
                 next_wp = self._corner_waypoints.pop(0)
-                print(f"[AVOID] Stage reached -- advancing to "
-                      f"({next_wp[0]:.0f},{next_wp[1]:.0f})px  "
-                      f"({len(self._corner_waypoints)} stage(s) remaining)")
+                if self._corner_approach_angle is not None:
+                    deg_err = angle_error(pose.angle, self._corner_approach_angle)
+                    print(f"[AVOID] Stage reached -- abs={pose.angle:.1f}°  "
+                          f"target={self._corner_approach_angle:.1f}°  "
+                          f"err={deg_err:+.1f}°  "
+                          f"advancing to ({next_wp[0]:.0f},{next_wp[1]:.0f})px  "
+                          f"({len(self._corner_waypoints)} remaining)")
+                else:
+                    print(f"[AVOID] Stage reached -- advancing to "
+                          f"({next_wp[0]:.0f},{next_wp[1]:.0f})px  "
+                          f"({len(self._corner_waypoints)} stage(s) remaining)")
                 self._avoid_target = next_wp
+                return Command.STOP
+            # All corner waypoints consumed — go straight to APPROACH (no SEEK re-evaluation)
+            if self._is_wall_ball:
+                if self._corner_approach_angle is not None:
+                    deg_err = angle_error(pose.angle, self._corner_approach_angle)
+                    print(f"[AVOID] All stages done -- abs={pose.angle:.1f}°  "
+                          f"target={self._corner_approach_angle:.1f}°  err={deg_err:+.1f}°  "
+                          f"-- straight to APPROACH (no turns)")
+                else:
+                    print("[AVOID] All corner stages done -- straight to APPROACH (no turns)")
+                self._avoid_target = None
+                self._transition(State.APPROACH)
                 return Command.STOP
             print("[AVOID] Waypoint reached -- returning to SEEK")
             self._avoid_target = None
@@ -284,15 +311,20 @@ class GolfBotController:
         dist_px = _distance_px(pose.px, target.px)
         print(f"[APPROACH] dist={dist_px:.0f}px  target=({target.px[0]:.0f},{target.px[1]:.0f})px")
 
-        # Close enough -> verify alignment before collecting
+        # Close enough -> collect
         if dist_px <= COLLECT_RADIUS_PX:
-            heading_error = self._heading_error_to(pose, target.cm)
-            if abs(heading_error) > ALIGN_THRESHOLD_DEG:
-                print(f"[APPROACH] Within collect radius but heading error={heading_error:.1f}° "
-                      f"> {ALIGN_THRESHOLD_DEG}° -- forcing strict re-align")
-                self._strict_align = True
-                self._transition(State.ALIGN)
-                return Command.STOP
+            if self._is_wall_ball:
+                # Wall/corner: trust the staging angle — no turns, just grab
+                heading_error = self._heading_error_to(pose, target.cm)
+                print(f"[APPROACH] Wall collect  heading_err={heading_error:+.1f}° -- grabbing ball")
+            else:
+                heading_error = self._heading_error_to(pose, target.cm)
+                if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+                    print(f"[APPROACH] Within collect radius but heading error={heading_error:.1f}° "
+                          f"> {ALIGN_THRESHOLD_DEG}° -- forcing strict re-align")
+                    self._strict_align = True
+                    self._transition(State.ALIGN)
+                    return Command.STOP
             print(f"[APPROACH] Within collect radius -- grabbing ball")
             self._locked_target = None
             self._route.advance()
@@ -310,14 +342,22 @@ class GolfBotController:
             self._transition(State.SEEK)
             return Command.COLLECT
 
-        # Drive forward (capped), then re-align
-        drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
-        rotations = _px_to_rotations(drive_px)
-        print(f"[APPROACH] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
-        self._execute_drive(pose, rotations)
-        self._transition(State.ALIGN)
-        return Command.FORWARD
-        # Next frame enters ALIGN to re-check heading before driving again
+        # Drive forward
+        if self._is_wall_ball:
+            # Wall/corner: no turns, same as normal but capped at 40px steps
+            drive_px = min(dist_px - COLLECT_RADIUS_PX, WALL_APPROACH_DRIVE_PX)
+            rotations = _px_to_rotations(drive_px)
+            print(f"[APPROACH] Wall drive {drive_px:.0f}px -> {rotations:.2f}rot  (no re-align)")
+            self._execute_drive(pose, rotations)
+            # Stay in APPROACH — no ALIGN loop
+            return Command.FORWARD
+        else:
+            drive_px  = min(dist_px - COLLECT_RADIUS_PX, MAX_DRIVE_PX)
+            rotations = _px_to_rotations(drive_px)
+            print(f"[APPROACH] Drive {drive_px:.0f}px -> {rotations:.2f}rot")
+            self._execute_drive(pose, rotations)
+            self._transition(State.ALIGN)
+            return Command.FORWARD
 
     # --- State: REVERSE (shared by REVERSE_WHITE and REVERSE_ORANGE) ----------
 

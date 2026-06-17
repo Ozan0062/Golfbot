@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-# calibration.py - gate motor calibration
-#   t <degrees>  turn motor (e.g. t -30)
-#   set          mark current position as zero and save
-#   q            quit
+"""
+gate_calibration_tool.py — interactive gate-motor calibration (runs on the EV3).
+
+Commands:
+    t <degrees>   turn the gate motor (e.g. t -30)
+    set           mark the current position as zero and save
+    q             quit
+"""
 
 import json, os, time
 

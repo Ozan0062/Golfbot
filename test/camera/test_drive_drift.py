@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from vision.camera import open_stream
 from vision.field import load_field_model, detect_corners, sort_corners, warp_field
 from vision.aruco import create_detector
-from vision.calibration import load_calibration, build_undistort_maps, remap
+from vision.lens_calibration import load_calibration, build_undistort_maps, remap
 from vision.tracker import robot_px_to_cm, get_true_robot_pose
 from controller.calibration_tracker import calibration_pixels
 import controller.ev3_controller as robot

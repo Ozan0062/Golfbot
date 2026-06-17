@@ -1,12 +1,14 @@
 """
-calibration.py — math helpers for drive/turn calibration.
-Called after every movement to refine calibration_tracker.py estimates.
+drive_calibration.py — math helpers for drive/turn calibration.
+
+Called after every movement to refine the estimates in calibration_tracker.py.
+(Camera lens calibration is separate — see vision/lens_calibration.py.)
 """
 
 import math
 
 
-# call after each move, pass result to calibration_tracker
+# Call after each move; pass the result to calibration_tracker.
 
 def measure_pixels_per_rotation(start_px, end_px, rotations: float) -> float:
     """Pixels travelled per rotation from a forward/backward move."""
@@ -24,9 +26,7 @@ def measure_degrees_per_rotation(start_heading: float, end_heading: float, rotat
     return abs(delta) / rotations
 
 
-
-
-# Runtime: convert desired distance/angle into rotations to command
+# Runtime: convert a desired distance/angle into rotations to command.
 
 def rotations_for_distance(distance_px: float, pixels_per_rotation: float) -> float:
     return distance_px / pixels_per_rotation

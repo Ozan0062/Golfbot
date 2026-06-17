@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from config import CAMERA_HEIGHT, CAMERA_WIDTH
 from test.camera.state_detector import StateDetector
 from vision.aruco import create_detector
-from vision.calibration import build_undistort_maps, load_calibration, undistort_frame
+from vision.lens_calibration import build_undistort_maps, load_calibration, undistort_frame
 from vision.camera import open_stream
 from vision.detector import detect_objects, load_object_model, draw_debug_overlay
 from vision.field import load_field_model, warp_field, detect_field

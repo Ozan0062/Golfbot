@@ -1,6 +1,9 @@
-# vision/detector.py — detect objects on the warped field image
-#
-# Run standalone to test on a saved image: python -m vision.detector warped_field.jpg
+"""
+detector.py — YOLO object detection (balls, cross) on the warped field image.
+
+Standalone test on a saved image:
+    python -m scripts.detector_test warped_field.jpg
+"""
 
 import math
 import cv2
@@ -203,28 +206,3 @@ def draw_debug_overlay(warped, detections, robot_center, robot_angle,
     _draw_state_banner(debug, state_name, command_name)
     _draw_legend(debug)
     return debug
-
-
-# ── Standalone test ─────────────────────────────────
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python -m vision.detector <image_path>")
-        sys.exit(1)
-
-    image_path = sys.argv[1]
-    frame = cv2.imread(image_path)
-    if frame is None:
-        print(f"Could not read image: {image_path}")
-        sys.exit(1)
-
-    model = load_object_model()
-    detections = detect_objects(model, frame)
-
-    print(f"\nFound {len(detections)} objects:")
-    for det in detections:
-        print(f"  {det['class_name']:12s} at ({det['center'][0]:.0f}, {det['center'][1]:.0f})  conf={det['confidence']:.0%}")
-
-    display = draw_detections(frame, detections)
-    cv2.imshow("Detections", display)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()

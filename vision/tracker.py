@@ -1,20 +1,23 @@
-# vision/tracker.py — convert pixel detections to real-world cm coordinates
-#
-# Run for a full test (camera → field → detect → cm coords): python -m vision.tracker
-# Coordinate system (cm):
-#
-# (0,0) ────── X ──────→ (180,0)
-#   │                        │
-#   │                        │
-#   Y      (90,60)           │
-#   │        center          │
-#   │                        │
-#   ↓                        │
-# (0,120) ──────────── (180,120)
-#
-# Origin = top-left corner of field
-# X increases rightward, Y increases downward
+"""
+tracker.py — convert pixel detections to real-world cm coordinates.
 
+Full pipeline smoke test (camera → field → detect → cm coords):
+    python -m scripts.tracker_pipeline
+
+Coordinate system (cm):
+
+    (0,0) ────── X ──────→ (180,0)
+      │                        │
+      │                        │
+      Y      (90,60)           │
+      │        center          │
+      │                        │
+      ↓                        │
+    (0,120) ──────────── (180,120)
+
+Origin = top-left corner of the field.
+X increases rightward, Y increases downward.
+"""
 
 import math
 import sys
@@ -209,104 +212,37 @@ def extract_objects(detections_cm):
         "cross":        (x_cm, y_cm) or None
         "cross_px":     (x_px, y_px) or None
         "ob":           (x_cm, y_cm) or None
-        "white_balls":  [(x_cm, y_cm), ...]
         "ob_px":        (x_px, y_px) or None
+        "white_balls":  [(x_cm, y_cm), ...]
         "white_balls_px": [(x_px, y_px), ...]
+
+    For the single-object classes (orange ball, cross) the most confident
+    detection wins.
     """
     objects = {
         "cross":          None,
         "cross_px":       None,
         "ob":             None,
-        "white_balls":    [],
         "ob_px":          None,
+        "white_balls":    [],
         "white_balls_px": [],
     }
+    best_ob_conf    = 0.0   # confidence of the orange ball kept so far
+    best_cross_conf = 0.0   # confidence of the cross kept so far
 
     for det in detections_cm:
-        name = det["class_name"]
+        name   = det["class_name"]
         pos_cm = det["position_cm"]
         pos_px = det["center"]          # original pixel coords from YOLO
 
         if name == "wb":
             objects["white_balls"].append(pos_cm)
             objects["white_balls_px"].append(pos_px)
-        elif name == "ob":
-            if objects["ob"] is None or det["confidence"] > (objects.get("_ob_conf") or 0):
-                objects["ob"]       = pos_cm
-                objects["ob_px"]    = pos_px
-                objects["_ob_conf"] = det["confidence"]
-        elif name == "cross":
-            if objects["cross"] is None or det["confidence"] > (objects.get("_cross_conf") or 0):
-                objects["cross"]       = pos_cm
-                objects["cross_px"]    = pos_px
-                objects["_cross_conf"] = det["confidence"]
+        elif name == "ob" and (objects["ob"] is None or det["confidence"] > best_ob_conf):
+            objects["ob"], objects["ob_px"] = pos_cm, pos_px
+            best_ob_conf = det["confidence"]
+        elif name == "cross" and (objects["cross"] is None or det["confidence"] > best_cross_conf):
+            objects["cross"], objects["cross_px"] = pos_cm, pos_px
+            best_cross_conf = det["confidence"]
 
     return objects
-
-
-# ── Standalone full pipeline test ───────────────────
-if __name__ == "__main__":  # pragma: no cover - live camera/model smoke test
-    from vision.camera import open_camera, grab_frame, release
-    from vision.field import load_field_model, detect_corners, sort_corners, warp_field
-    from vision.detector import load_object_model, detect_objects, draw_detections
-    from vision.aruco import create_detector, detect_robot, draw_robot
-    import cv2
-
-    print("Loading models...")
-    field_model = load_field_model()
-    object_model = load_object_model()
-    aruco_detector = create_detector()
-
-    cap = open_camera()
-    print("Grabbing frame...")
-    frame = grab_frame(cap)
-    release(cap)
-
-    # Step 1: find field
-    corners = detect_corners(field_model, frame)
-    if len(corners) < 4:
-        print(f"Only found {len(corners)} corners, need 4. Exiting.")
-        sys.exit(1)
-
-    sorted_c = sort_corners(corners)
-    warped, M = warp_field(frame, sorted_c)
-    h, w = warped.shape[:2]
-
-    # Step 2: detect objects on warped image (YOLO)
-    detections = detect_objects(object_model, warped)
-
-    # Step 3: detect robot on warped image (ArUco)
-    robot_center, robot_angle = detect_robot(aruco_detector, warped)
-
-    # Step 4: convert to cm
-    detections_cm = pixels_to_cm(detections, w, h)
-    objects = extract_objects(detections_cm)
-
-    robot_cm = robot_px_to_cm(robot_center, w, h)
-
-    # Print results
-    print(f"\n{'─' * 40}")
-    print(f"Field warped to {w}x{h} px → {FIELD_WIDTH_CM}x{FIELD_HEIGHT_CM} cm")
-    print(f"{'─' * 40}")
-
-    if robot_cm:
-        print(f"  robot:        ({robot_cm[0]:.1f}, {robot_cm[1]:.1f}) cm  heading={robot_angle:.0f}°")
-    else:
-        print(f"  robot:        not found (no ArUco marker detected)")
-
-    for key, val in objects.items():
-        if key == "white_balls":
-            print(f"  white_balls ({len(val)}):")
-            for i, pos in enumerate(val):
-                print(f"    [{i}] ({pos[0]:.1f}, {pos[1]:.1f}) cm")
-        elif val:
-            print(f"  {key:12s}: ({val[0]:.1f}, {val[1]:.1f}) cm")
-        else:
-            print(f"  {key:12s}: not found")
-
-    # Show annotated image
-    display = draw_detections(warped, detections)
-    display = draw_robot(display, robot_center, robot_angle)
-    cv2.imshow("Full Pipeline", display)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()

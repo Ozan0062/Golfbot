@@ -74,7 +74,9 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         calls = []
         controller = GolfBotController()
         controller.state = State.DRIVE_GOAL
-        world = {"robot": (20.0, 60.0), "robot_px": (100, 300), "robot_angle": 0.0}
+        # Far from the goal (x=500) and facing it (180° = toward the left wall),
+        # so the first move is a straight drive toward the first staging waypoint.
+        world = {"robot": (100.0, 60.0), "robot_px": (500, 300), "robot_angle": 180.0}
 
         with patch("controller.state_machine.robot.drive", lambda rotations: calls.append(rotations)):
             command = controller.update(world)
@@ -87,7 +89,9 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         calls = []
         controller = GolfBotController()
         controller.state = State.DRIVE_GOAL
-        world = {"robot": (20.0, 60.0), "robot_px": (100, 300), "robot_angle": 90.0}
+        # Far from the goal (x=500) but facing up (270°) instead of toward it,
+        # so the first move is a turn to face the first staging waypoint.
+        world = {"robot": (100.0, 60.0), "robot_px": (500, 300), "robot_angle": 270.0}
 
         with patch("controller.state_machine.robot.turn", lambda rotations, direction: calls.append((rotations, direction))):
             command = controller.update(world)
@@ -98,7 +102,9 @@ class StateMachineReverseGoalTests(unittest.TestCase):
     def test_drive_goal_transitions_to_release_when_robot_is_at_goal(self):
         controller = GolfBotController()
         controller.state = State.DRIVE_GOAL
-        world = {"robot": (180.0, 60.0), "robot_px": (900, 300), "robot_angle": 0.0}
+        # At the goal (x=50, within GOAL_THRESHOLD_PX of the left wall): no staging
+        # left and close enough to release.
+        world = {"robot": (10.0, 60.0), "robot_px": (50, 300), "robot_angle": 0.0}
 
         command = controller.update(world)
 

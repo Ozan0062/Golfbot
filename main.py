@@ -22,7 +22,7 @@ from vision.field       import load_field_model, warp_field, detect_field
 from vision.detector    import load_object_model, detect_objects, draw_debug_overlay
 from vision.tracker     import get_true_robot_pose, filter_detections_near_robot, build_world_dict
 from vision.aruco       import create_detector
-from vision.calibration import load_calibration, build_undistort_maps, undistort_frame
+from vision.lens_calibration import load_calibration, build_undistort_maps, undistort_frame
 
 from controller.state_machine import GolfBotController
 import controller.ev3_controller as robot

@@ -64,6 +64,23 @@ def classify_zone(target_px, wall_margin, field_width, field_height):
 
 # --- Wall / corner approach geometry --------------------------------------
 
+# Required robot heading (deg) for a ball touching a single wall, by wall name.
+_WALL_APPROACH_ANGLE = {
+    "top":    -90.0,
+    "bottom":  90.0,
+    "left":   180.0,
+    "right":    0.0,
+}
+
+# Required robot heading (deg) for a ball in a corner, keyed by the wall pair.
+_CORNER_APPROACH_ANGLE = {
+    frozenset({"top", "left"}):     -135.0,
+    frozenset({"top", "right"}):     -45.0,
+    frozenset({"bottom", "left"}):   135.0,
+    frozenset({"bottom", "right"}):   45.0,
+}
+
+
 def wall_approach_angle(walls):
     """
     Required robot heading (degrees) when collecting a wall or corner ball.
@@ -76,24 +93,10 @@ def wall_approach_angle(walls):
 
     Returns None for open-field balls (no constraint).
     """
-    _WALL = {
-        "top":    -90.0,
-        "bottom":  90.0,
-        "left":   180.0,
-        "right":    0.0,
-    }
-
-    _CORNER = {
-        frozenset({"top", "left"}):     -135.0,
-        frozenset({"top", "right"}):     -45.0,
-        frozenset({"bottom", "left"}):   135.0,
-        frozenset({"bottom", "right"}):   45.0,
-    }
-
     if len(walls) >= 2:
-        return _CORNER.get(frozenset(walls[:2]))
+        return _CORNER_APPROACH_ANGLE.get(frozenset(walls[:2]))
     if len(walls) == 1:
-        return _WALL.get(walls[0])
+        return _WALL_APPROACH_ANGLE.get(walls[0])
     return None
 
 

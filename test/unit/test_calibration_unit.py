@@ -5,7 +5,7 @@ Verifies distance/angle conversions without moving the robot.
 
 import unittest
 
-from controller.calibration import (
+from controller.drive_calibration import (
     measure_cm_per_rotation,
     measure_degrees_per_rotation,
     measure_pixels_per_rotation,

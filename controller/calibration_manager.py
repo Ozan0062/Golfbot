@@ -9,7 +9,7 @@ cal.record_turn(robot_angle, rotations)
 cal.consume(pose.px, pose.angle)
 """
 
-from controller.calibration import measure_pixels_per_rotation, measure_degrees_per_rotation
+from controller.drive_calibration import measure_pixels_per_rotation, measure_degrees_per_rotation
 from controller.calibration_tracker import calibration_pixels, calibration_angle_left, calibration_angle_right
 from golfbot_logger import get_logger
 

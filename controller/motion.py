@@ -1,0 +1,128 @@
+"""
+motion.py — movement maths and the low-level Driver for the state machine.
+
+Keeps the "how to move" details out of state_machine.py:
+  * unit conversions (pixels <-> motor rotations, angles -> rotations)
+  * staging-waypoint geometry for wall/corner/goal approaches
+  * the Driver: issues motor commands, records calibration, invalidates the pose
+  * drive_toward(): the single "turn to face a point, else drive toward it" step
+    used by every navigating state (AVOID, APPROACH, DRIVE_GOAL).
+
+Because the warped→cm scale is uniform (180/900 == 120/600), a bearing computed
+in pixels equals one computed in cm, so everything here works in pixels.
+"""
+
+import math
+
+import controller.ev3_controller as robot
+from controller.commands import Command
+from controller.navigation import angle_to_target, angle_error, staging_point
+from controller.calibration_tracker import (
+    calibration_pixels, calibration_angle_left, calibration_angle_right,
+)
+from config import ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX
+from golfbot_logger import get_logger
+
+log = get_logger(__name__)
+
+
+# --- Unit conversions --------------------------------------------------------
+
+def distance_px(a, b):
+    if a is None or b is None:
+        return 0.0
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def px_to_rotations(drive_px):
+    return drive_px / calibration_pixels.ratio
+
+
+def angle_to_rotations(heading_error):
+    tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
+    return abs(heading_error) / tracker.ratio * TURN_DAMPING
+
+
+# --- Staging geometry --------------------------------------------------------
+
+def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
+                              stage_distances, field_w, field_h, margin):
+    """
+    Ordered waypoints along the approach axis for a wall/corner (or goal) ball.
+
+    Stages run far→close (e.g. 340px then 170px from the ball).  A stage is
+    skipped only if the robot has already driven past it along the approach
+    axis (measured by projecting the robot onto the approach direction, so a
+    robot off to the side is never wrongly treated as "past" a stage).  Each
+    waypoint is clamped to stay inside the field boundary.
+    """
+    angle_rad = math.radians(approach_angle_deg)
+    # Unit vector pointing away from the ball along the approach axis
+    # (the direction the robot comes in from).
+    behind_x = -math.cos(angle_rad)
+    behind_y = -math.sin(angle_rad)
+    robot_proj = ((robot_px[0] - ball_px[0]) * behind_x +
+                  (robot_px[1] - ball_px[1]) * behind_y)
+
+    waypoints = []
+    for dist in stage_distances:                # already ordered far→close
+        if robot_proj <= dist:
+            continue                            # robot is nearer than this stage; skip it
+        sp = staging_point(ball_px, approach_angle_deg, dist)
+        sp = (
+            max(margin, min(sp[0], field_w - margin)),
+            max(margin, min(sp[1], field_h - margin)),
+        )
+        waypoints.append(sp)
+    return waypoints
+
+
+# --- Driver ------------------------------------------------------------------
+
+class Driver:
+    """
+    Owns the actual motor calls.  Every move records a calibration sample and
+    invalidates the pose cache (so the FSM waits for the robot to settle).
+    """
+
+    def __init__(self, cal, pose_cache):
+        self._cal  = cal
+        self._pose = pose_cache
+
+    def drive(self, pose, rotations):
+        self._cal.record_drive(pose.px, rotations)
+        robot.drive(rotations)
+        self._pose.invalidate()
+
+    def turn(self, pose, rotations, direction):
+        self._cal.record_turn(pose.angle, rotations, direction.name)
+        robot.turn(rotations, direction.name)
+        self._pose.invalidate()
+
+    def reverse(self, rotations):
+        robot.reverse(rotations)
+        self._pose.invalidate()
+
+    def drive_toward(self, pose, target_px, arrive_radius):
+        """
+        One movement step toward target_px: turn to face it, or drive toward it
+        if already aligned.  Returns (command, arrived) where arrived is True
+        once the robot is within arrive_radius (no command issued in that case).
+        """
+        dist = distance_px(pose.px, target_px)
+        if dist <= arrive_radius:
+            return Command.STOP, True
+
+        heading_error = angle_error(pose.angle, angle_to_target(pose.px, target_px))
+        if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+            rotations = angle_to_rotations(heading_error)
+            if rotations >= MIN_TURN_ROTATIONS:
+                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+                log.debug("turn %s %.1f° -> %.2f rot", direction.name, abs(heading_error), rotations)
+                self.turn(pose, rotations, direction)
+                return direction, False
+
+        drive_px = min(dist - arrive_radius, MAX_DRIVE_PX)
+        log.debug("drive %.0f px", drive_px)
+        self.drive(pose, px_to_rotations(drive_px))
+        return Command.FORWARD, False

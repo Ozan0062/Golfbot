@@ -1,0 +1,8 @@
+[run]
+omit =
+    vision/aruco.py
+    vision/calibration.py
+    vision/camera.py
+    vision/detector.py
+    vision/field.py
+

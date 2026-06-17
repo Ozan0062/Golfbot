@@ -245,7 +245,7 @@ def extract_objects(detections_cm):
 
 
 # ── Standalone full pipeline test ───────────────────
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - live camera/model smoke test
     from vision.camera import open_camera, grab_frame, release
     from vision.field import load_field_model, detect_corners, sort_corners, warp_field
     from vision.detector import load_object_model, detect_objects, draw_detections

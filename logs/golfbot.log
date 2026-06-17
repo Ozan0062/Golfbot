@@ -1,0 +1,27 @@
+2026-06-16 12:09:12  [32mINFO[0m  golfbot_logger — Log file → /Users/samin/Documents/GitHub/Golfbot/logs/golfbot.log
+2026-06-16 12:09:12  [36mDEBUG[0m  __main__ — DEBUG — fine detail, pipeline values, cm coords
+2026-06-16 12:09:12  [32mINFO[0m  __main__ — INFO — normal milestone, state transition
+2026-06-16 12:09:12  [33mWARNING[0m  __main__ — WARNING — recoverable issue, pose lost
+2026-06-16 12:09:12  [31mERROR[0m  __main__ — ERROR — TCP failure, motor fault
+2026-06-16 12:09:12  [35mCRITICAL[0m  __main__ — CRITICAL — unrecoverable, no camera found
+2026-06-16 13:57:39  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 13:57:39  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 13:57:41  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x640)
+2026-06-16 13:58:48  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 13:58:48  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 13:58:50  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x640)
+2026-06-16 14:08:14  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 14:08:14  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 14:08:15  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x480)
+2026-06-16 14:10:39  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 14:10:39  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 14:10:41  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x480)
+2026-06-16 14:11:35  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 14:11:35  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 14:11:37  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x480)
+2026-06-16 14:32:24  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 14:32:24  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 14:32:25  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x480)
+2026-06-16 14:33:41  [32mINFO[0m  golfbot_logger — Log file → C:\Users\rubym\Golfbot\logs\golfbot.log
+2026-06-16 14:33:41  [32mINFO[0m  __main__ — GolfBot starting...
+2026-06-16 14:33:42  [32mINFO[0m  __main__ — Lens calibration loaded — undistort maps built (640x480)

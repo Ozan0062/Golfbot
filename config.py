@@ -3,7 +3,7 @@
 #Camera
 CAMERA_INDEX = 1  #1usb,0pccam
 CAMERA_WIDTH = 640
-CAMERA_HEIGHT = 640
+CAMERA_HEIGHT = 480
 
 #Field
 FIELD_WIDTH_CM = 180.0
@@ -31,9 +31,13 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 GOAL_POSITION_CM = (FIELD_WIDTH_CM, FIELD_HEIGHT_CM / 2)
 GOAL_POSITION_PX = (WARPED_WIDTH, WARPED_HEIGHT // 2)
 
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 #yolo models
-FIELD_MODEL_PATH = "vision/models/best_field.onnx"
-OBJECT_MODEL_PATH = "vision/models/best_objects.onnx"
+FIELD_MODEL_PATH = os.path.join(BASE_DIR, "vision", "models", "best_field.onnx")
+OBJECT_MODEL_PATH = os.path.join(BASE_DIR, "vision", "models", "best_objects.onnx")
 CONFIDENCE_THRESHOLD = 0.5
 
 #object id (no robot — detected via ArUco marker instead)

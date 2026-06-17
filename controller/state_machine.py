@@ -6,7 +6,7 @@ import time
 
 import controller.ev3_controller as robot
 from controller.calibration_manager import CalibrationManager
-from controller.calibration_tracker import calibration_angle, calibration_pixels
+from controller.calibration_tracker import calibration_angle_left, calibration_angle_right, calibration_pixels
 from controller.commands import Command
 from controller.navigation import (
     angle_to_target, angle_error, path_is_clear, obstacle_waypoint,
@@ -30,7 +30,7 @@ MAX_DRIVE_PX = 300           # Cap on drive distance per cycle to allow for cour
 
 CROSS_CLEARANCE_PX = 70     # Min distance from cross before avoidance triggers.
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2   # Waypoint offset from cross.
-AVOID_ARRIVE_PX = 20        # Close enough to waypoint to consider it reached.
+AVOID_ARRIVE_PX = 15        # Close enough to waypoint to consider it reached.
 
 WALL_MARGIN_PX = 120       # Ball this close to a wall triggers wall approach.
 STAGING_DISTANCE_PX = 170    # How far back from the ball the staging point is.
@@ -66,7 +66,8 @@ class GolfBotController:
         self._avoid_target   = None   # type tuple
         self._is_wall_ball   = False  # True when current target is near a wall/corner
         print(f"[FSM] Ready.  Goal={GOAL_POSITION_CM}  "
-              f"cal={calibration_angle.ratio:.1f}deg/rot  {calibration_pixels.ratio:.1f}px/rot")
+              f"cal=L{calibration_angle_left.ratio:.1f}/R{calibration_angle_right.ratio:.1f}deg/rot  "
+              f"{calibration_pixels.ratio:.1f}px/rot")
 
     # -- Main entry point (called once per camera frame) -----------------------
 
@@ -111,7 +112,7 @@ class GolfBotController:
     def _seek(self, pose, world) -> Command:
         # Re-lock target only if we don't already have one (returning from AVOID)
         if self._locked_target is None:
-            self._locked_target = self._route.get_target(pose.pos, pose.px, world)
+         self._locked_target = self._route.get_target(pose.pos, pose.px, world)
 
         if self._locked_target is None:
             print("[FSM] No balls visible -- reversing.")
@@ -210,6 +211,7 @@ class GolfBotController:
             return Command.STOP
 
         heading_error = self._heading_error_to(pose, target.cm)
+        print(f"[ALIGN] Heading_Error!!!!!={heading_error}")
         print(f"[ALIGN] heading={pose.angle:.1f}deg  error={heading_error:.1f}deg")
 
         if abs(heading_error) <= ALIGN_THRESHOLD_DEG:
@@ -327,7 +329,7 @@ class GolfBotController:
         self._pose.invalidate()
 
     def _execute_turn(self, pose, rotations, direction):
-        self._cal.record_turn(pose.angle, rotations)
+        self._cal.record_turn(pose.angle, rotations, direction.name)
         robot.turn(rotations, direction.name)
         self._pose.invalidate()
 
@@ -359,4 +361,5 @@ def _px_to_rotations(drive_px):
 
 
 def _angle_to_rotations(heading_error):
-    return abs(heading_error) / calibration_angle.ratio * TURN_DAMPING
+    tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
+    return abs(heading_error) / tracker.ratio * TURN_DAMPING

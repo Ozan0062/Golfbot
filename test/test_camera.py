@@ -1,7 +1,4 @@
-"""
-test_camera.py — raw camera feed for field/robot placement.
-Press ESC to quit.
-"""
+import aruco
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

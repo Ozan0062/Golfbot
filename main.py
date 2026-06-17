@@ -18,6 +18,8 @@ import cv2
 import numpy as np
 import time
 
+from golfbot_logger import setup_logging, get_logger
+
 from vision.camera   import open_stream
 from vision.field    import load_field_model, detect_corners, sort_corners, warp_field
 from vision.detector import load_object_model, detect_objects, draw_detections
@@ -29,6 +31,8 @@ from controller.state_machine import GolfBotController
 from config import (ROBOT_FILTER_RADIUS_PX, CAMERA_WIDTH, CAMERA_HEIGHT,
                      CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM, CAMERA_CENTER_PX,
                      FIELD_WIDTH_CM, FIELD_HEIGHT_CM, WARPED_WIDTH, WARPED_HEIGHT)
+
+log = get_logger(__name__)
 
 
 # ─── Vision pipeline helpers ─────────────────────────────────────────────────
@@ -56,11 +60,13 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     Detect the ArUco marker on the raw (un-warped) frame, then project
     the robot's centre and heading into warped top-down coordinates.
 
-    Returns (center_px, angle_deg) or (None, None).
+    Returns (center_px, forward_px, angle_deg) or (None, None, None).
+    forward_px is needed so correct_robot_height can correct both points
+    and recompute the angle — without this, the angle is off at field edges.
     """
     center_raw, angle_raw = detect_robot(aruco_detector, raw_frame)
     if center_raw is None:
-        return None, None
+        return None, None, None
 
     # Project two points: the marker centre and a point 50px ahead along the heading.
     # The angle between them in warped space gives the warped heading.
@@ -71,12 +77,13 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
     pts = np.array([[center_raw, forward_raw]], dtype=np.float32)
     warped_pts = cv2.perspectiveTransform(pts, homography_matrix)[0]
 
-    center = (float(warped_pts[0][0]), float(warped_pts[0][1]))
-    angle  = math.degrees(math.atan2(
-        warped_pts[1][1] - warped_pts[0][1],
-        warped_pts[1][0] - warped_pts[0][0],
+    center  = (float(warped_pts[0][0]), float(warped_pts[0][1]))
+    forward = (float(warped_pts[1][0]), float(warped_pts[1][1]))
+    angle   = math.degrees(math.atan2(
+        forward[1] - center[1],
+        forward[0] - center[0],
     ))
-    return center, angle
+    return center, forward, angle
 
 
 def correct_robot_height(center_px, cam_center_px, cam_h, marker_h,
@@ -155,10 +162,37 @@ def build_world_dict(detections, robot_center, robot_angle, image_w, image_h):
     return world
 
 
-def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name, command_name):
+def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name, command_name, locked_target=None):
     """Draw detections, robot marker, and current state on the frame."""
     debug = draw_detections(warped, detections)
     debug = draw_robot(debug, robot_center, robot_angle)
+    
+    if locked_target is not None:
+        px = locked_target.px
+        # Magenta square around target
+        cv2.rectangle(debug, (int(px[0]) - 20, int(px[1]) - 20),
+                      (int(px[0]) + 20, int(px[1]) + 20), (255, 0, 255), 2)
+                      
+        if robot_center is not None and robot_angle is not None:
+            # Yellow square around robot
+            rx, ry = int(robot_center[0]), int(robot_center[1])
+            cv2.rectangle(debug, (rx - 25, ry - 25), (rx + 25, ry + 25), (0, 255, 255), 2)
+            
+            # Calculate distance and angle error
+            dx = px[0] - rx
+            dy = px[1] - ry
+            dist_px = math.hypot(dx, dy)
+            target_heading = math.degrees(math.atan2(dy, dx))
+            heading_error = (target_heading - robot_angle + 180) % 360 - 180
+            
+            # Draw line between them
+            cv2.line(debug, (rx, ry), (int(px[0]), int(px[1])), (0, 255, 255), 1)
+            
+            # Show distance and angle near robot
+            info_str = f"Dist: {dist_px:.0f}px | Ang: {heading_error:.1f}deg"
+            cv2.putText(debug, info_str, (rx - 50, ry - 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
+
     cv2.putText(debug, f"{state_name}  {command_name}",
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     return debug
@@ -167,7 +201,8 @@ def draw_debug_overlay(warped, detections, robot_center, robot_angle, state_name
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
 def main():
-    print("GolfBot starting...")
+    setup_logging(level="INFO")
+    log.info("GolfBot starting...")
 
     # Load models and open camera
     field_model    = load_field_model()
@@ -180,7 +215,7 @@ def main():
     undist_maps = None
     if mtx is not None:
         undist_maps = build_undistort_maps(mtx, dist, (CAMERA_WIDTH, CAMERA_HEIGHT))
-        print(f"Lens calibration loaded — undistort maps built ({CAMERA_WIDTH}x{CAMERA_HEIGHT})")
+        log.info("Lens calibration loaded — undistort maps built (%dx%d)", CAMERA_WIDTH, CAMERA_HEIGHT)
 
     controller   = GolfBotController()
     last_corners = None
@@ -196,7 +231,7 @@ def main():
         # ── 2. Detect field and warp to top-down view ────────────────────
         last_corners = detect_field(field_model, frame, last_corners)
         if last_corners is None:
-            print("Waiting for field corners...")
+            log.warning("Waiting for field corners...")
             time.sleep(5) # Avoid spamming
             continue
 
@@ -204,16 +239,29 @@ def main():
         h, w = warped.shape[:2]
 
         # ── 3. Detect robot pose (ArUco on raw frame → warped coords) ───
-        robot_center, robot_angle = detect_robot_pose_in_warped_coords(
+        robot_center, robot_forward, robot_angle = detect_robot_pose_in_warped_coords(
             aruco_detector, frame, homography
         )
 
         # ── 4. Correct for marker height (18cm above floor) ─────────────
+        #    Apply to both center and forward point, then recompute angle.
+        #    Without this the angle is off at field edges because the radial
+        #    scaling toward camera center shifts the two points by different amounts.
         robot_center = correct_robot_height(
             robot_center, CAMERA_CENTER_PX,
             CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
             w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
         )
+        robot_forward = correct_robot_height(
+            robot_forward, CAMERA_CENTER_PX,
+            CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+            w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+        )
+        if robot_center is not None and robot_forward is not None:
+            robot_angle = math.degrees(math.atan2(
+                robot_forward[1] - robot_center[1],
+                robot_forward[0] - robot_center[0],
+            ))
 
         # ── 5. Detect balls and obstacles (YOLO on warped frame) ─────────
         detections = detect_objects(object_model, warped)
@@ -225,7 +273,7 @@ def main():
 
         # ── 6. Debug overlay ─────────────────────────────────────────────
         debug = draw_debug_overlay(warped, detections, robot_center, robot_angle,
-                                   controller.state.name, command.name)
+                                   controller.state.name, command.name, controller._locked_target)
         cv2.imshow("GolfBot", debug)
         if cv2.waitKey(1) & 0xFF == 27:
             break

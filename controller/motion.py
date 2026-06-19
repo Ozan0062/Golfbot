@@ -79,7 +79,7 @@ class Driver:
         self._pose = pose_cache
 
     def drive(self, pose, rotations):
-        rotations = max(rotations, 0.05)
+        rotations = max(rotations, 0.1)
         self._cal.record_drive(pose.px, rotations)
         robot.drive(rotations)
         self._pose.invalidate()

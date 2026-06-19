@@ -41,12 +41,11 @@ from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from config import (
     GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
-    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_PX, GOAL_THRESHOLD_PX, REVERSE_ROTATIONS,
+    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_PX, GOAL_ARRIVE_PX,
+    GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
     MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
-    COLLECT_EDGE_X_MIN, COLLECT_EDGE_X_MAX, COLLECT_EDGE_Y_MIN,
-    COLLECT_EDGE_Y_MAX, COLLECT_EDGE_OFFSET,
     MARKER_TO_CLAW_CM, CLAW_HEIGHT_CM,
 )
 from golfbot_logger import get_logger
@@ -62,12 +61,6 @@ def _claw_tip(robot_px, robot_angle_deg):
             robot_px[1] + _MARKER_TO_CLAW_PX * math.sin(rad))
 
 
-def _collect_radius(ball_px) -> int:
-    """Return the collect radius for a ball, with a position-based offset for edge zones."""
-    x, y = ball_px
-    in_edge = (x < COLLECT_EDGE_X_MIN or x > COLLECT_EDGE_X_MAX or
-               y < COLLECT_EDGE_Y_MIN or y > COLLECT_EDGE_Y_MAX)
-    return COLLECT_RADIUS_PX + (COLLECT_EDGE_OFFSET if in_edge else 0)
 
 log = get_logger(__name__)
 
@@ -266,24 +259,15 @@ class GolfBotController:
         # Use the claw tip (not the marker) as the reference for arrival.
         # In floor-projected space the scale is uniform so projecting by
         # MARKER_TO_CLAW_PX along the corrected heading gives the true claw position.
-        claw   = _claw_tip(pose.px, pose.angle)
-        radius = _collect_radius(target.px)
-        dx     = abs(claw[0] - target.px[0])
-        dy     = abs(claw[1] - target.px[1])
+        claw = _claw_tip(pose.px, pose.angle)
+        dx   = abs(claw[0] - target.px[0])
+        dy   = abs(claw[1] - target.px[1])
 
-        if dx > radius or dy > radius:
-            # Not arrived — drive toward ball.  Pass arrive_radius such that
-            # drive_toward coasts approximately to where the claw will be at
-            # collect distance (marker→ball ≈ claw→ball + MARKER_TO_CLAW_PX).
-            drive_arrive = radius + _MARKER_TO_CLAW_PX
-            command, _ = self._driver.drive_toward(pose, target.px, drive_arrive)
-            return command
-
-        # Fine gate: require within COLLECT_RADIUS_PX in both axes even for edge balls.
         if dx > COLLECT_RADIUS_PX or dy > COLLECT_RADIUS_PX:
             drive_arrive = COLLECT_RADIUS_PX + _MARKER_TO_CLAW_PX
-            command, _ = self._driver.drive_toward(pose, target.px, drive_arrive)
-            return command
+            command, arrived = self._driver.drive_toward(pose, target.px, drive_arrive)
+            if not arrived:
+                return command
 
         # Claw within collect range — check we're actually pointed at the ball.
         # Use the marker (rotation centre) for the bearing, not the claw tip.
@@ -306,10 +290,8 @@ class GolfBotController:
         dy      = claw[1] - target.px[1]
         deg_off = angle_error(pose.angle, angle_to_target(pose.px, target.px))
         log.debug(
-            "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) "
-            "Δx=%.1f Δy=%.1f px, %.1f° off (radius=%d)",
-            claw[0], claw[1], target.px[0], target.px[1],
-            dx, dy, deg_off, _collect_radius(target.px),
+            "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) Δx=%.1f Δy=%.1f px, %.1f° off",
+            claw[0], claw[1], target.px[0], target.px[1], dx, dy, deg_off,
         )
         log.info("Collected ball")
         self._locked_target = None
@@ -370,13 +352,19 @@ class GolfBotController:
                 return Command.STOP
             return command
 
-        # Staging done — drive straight in (no turns) until close enough to release.
-        dist = distance_px(pose.px, GOAL_POSITION_PX)
-        if dist > GOAL_THRESHOLD_PX:
-            drive_px = min(dist - GOAL_THRESHOLD_PX, MAX_DRIVE_PX)
-            self._driver.drive(pose, px_to_rotations(drive_px))
-            log.debug("Goal final drive %.0f px", drive_px)
-            return Command.FORWARD
+        # Enforce heading before driving into the goal.
+        goal_heading_err = angle_error(pose.angle, GOAL_HEADING_DEG)
+        if abs(goal_heading_err) > GOAL_HEADING_TOL_DEG:
+            direction = Command.RIGHT if goal_heading_err > 0 else Command.LEFT
+            log.debug("Goal heading correct %.1f° %s", abs(goal_heading_err), direction.name)
+            self._driver.turn(pose, angle_to_rotations(goal_heading_err), direction)
+            return direction
+
+        # Staging done — drive straight in to the goal coordinate.
+        command, arrived = self._driver.drive_toward(pose, GOAL_POSITION_PX, GOAL_ARRIVE_PX)
+        if not arrived:
+            log.debug("Goal final approach")
+            return command
 
         log.info("Reached goal — releasing balls")
         self._goal_waypoints = None             # reset in case of another run

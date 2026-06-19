@@ -31,7 +31,7 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 
 # Goal: left wall, vertically centred.
 GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
-GOAL_POSITION_PX = (0, WARPED_HEIGHT // 2)
+GOAL_POSITION_PX = (35, 300)   # claw target coordinate at the goal
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive
@@ -48,15 +48,9 @@ COLLECT_ANGLE_DEG = 5.0      # max angular offset (deg) in x AND y, measured fro
 COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correction nudge,
                              # so the motor command is always large enough to execute.
 
-# Position-based collect radius offsets.
-# A small additional tolerance for balls near the field edges where
-# YOLO detection jitter can be slightly higher.
-COLLECT_EDGE_X_MIN    = 100   # left edge zone:   ball x < this
-COLLECT_EDGE_X_MAX    = 800   # right edge zone:  ball x > this
-COLLECT_EDGE_Y_MIN    = 100   # top edge zone:    ball y < this
-COLLECT_EDGE_Y_MAX    = 500   # bottom edge zone: ball y > this
-COLLECT_EDGE_OFFSET   = 10    # extra px (2 cm) for edge-zone balls
-GOAL_THRESHOLD_PX = 100      # close enough to the goal to stop and release
+GOAL_ARRIVE_PX = 100         # arrive radius (px) for the final goal approach
+GOAL_HEADING_DEG     = 180.0  # required robot heading when entering the goal
+GOAL_HEADING_TOL_DEG = 5.0    # tolerance either side of GOAL_HEADING_DEG
 REVERSE_ROTATIONS = 1.0      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
 

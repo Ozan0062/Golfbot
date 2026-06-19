@@ -16,13 +16,13 @@ WARPED_WIDTH  = 900
 WARPED_HEIGHT = 600
 
 # --- Parallax / height correction (cm) ---------------------------------------
-CAMERA_HEIGHT_CM       = 174.0
-ROBOT_MARKER_HEIGHT_CM = 18.0    # ArUco marker height above the field
+CAMERA_HEIGHT_CM       = 179.5
+ROBOT_MARKER_HEIGHT_CM = 19.8    # ArUco marker height above the field
 
 # The point on the field the camera hangs directly above, in warped pixels.
 # Scaled from (312, 303) in the old 640×480 view to 900×600.
 # Re-measure in the 900×600 warped image if you need more precision.
-CAMERA_CENTER_PX = (451, 356)
+CAMERA_CENTER_PX = (456, 353)
 
 # --- Navigation safety -------------------------------------------------------
 # Keep the robot centre at least this far from the field edges while collecting.
@@ -38,9 +38,23 @@ ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" an
 MIN_TURN_ROTATIONS  = 0.25   # ignore turns smaller than this
 TURN_DAMPING        = 0.6    # scale turns down to avoid oscillation when close
 
-COLLECT_RADIUS_PX = 90       # close enough to a ball to grab it
+MARKER_TO_CLAW_CM = 16.8     # physical distance from ArUco marker centre to claw tip (cm)
+CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm) — used for parallax correction
+
+COLLECT_RADIUS_PX = 10       # claw-tip → ball distance at which we grab (open field).
+                             # ~6 cm: ball radius (2 cm) + detection/projection jitter.
+                             # NOTE: this is measured from the claw tip, NOT the marker.
+
+# Position-based collect radius offsets.
+# A small additional tolerance for balls near the field edges where
+# YOLO detection jitter can be slightly higher.
+COLLECT_EDGE_X_MIN    = 100   # left edge zone:   ball x < this
+COLLECT_EDGE_X_MAX    = 800   # right edge zone:  ball x > this
+COLLECT_EDGE_Y_MIN    = 100   # top edge zone:    ball y < this
+COLLECT_EDGE_Y_MAX    = 500   # bottom edge zone: ball y > this
+COLLECT_EDGE_OFFSET   = 10    # extra px (2 cm) for edge-zone balls
 GOAL_THRESHOLD_PX = 100      # close enough to the goal to stop and release
-REVERSE_ROTATIONS = 1.5      # how far to back up when no balls are visible
+REVERSE_ROTATIONS = 1.0      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
 
 CROSS_CLEARANCE_PX     = 70                      # stay at least this far from the cross

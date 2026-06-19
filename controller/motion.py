@@ -50,24 +50,13 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
     """
     Ordered waypoints along the approach axis for a wall/corner (or goal) ball.
 
-    Stages run far→close (e.g. 340px then 170px from the ball).  A stage is
-    skipped only if the robot has already driven past it along the approach
-    axis (measured by projecting the robot onto the approach direction, so a
-    robot off to the side is never wrongly treated as "past" a stage).  Each
-    waypoint is clamped to stay inside the field boundary.
+    All stages are always returned (far→close), regardless of the robot's
+    current position.  Each waypoint is clamped to stay inside the field boundary.
     """
     angle_rad = math.radians(approach_angle_deg)
-    # Unit vector pointing away from the ball along the approach axis
-    # (the direction the robot comes in from).
-    behind_x = -math.cos(angle_rad)
-    behind_y = -math.sin(angle_rad)
-    robot_proj = ((robot_px[0] - ball_px[0]) * behind_x +
-                  (robot_px[1] - ball_px[1]) * behind_y)
 
     waypoints = []
     for dist in stage_distances:                # already ordered far→close
-        if robot_proj <= dist:
-            continue                            # robot is nearer than this stage; skip it
         sp = staging_point(ball_px, approach_angle_deg, dist)
         sp = (
             max(margin, min(sp[0], field_w - margin)),

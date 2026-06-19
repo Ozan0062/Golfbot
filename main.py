@@ -34,7 +34,7 @@ NO_FIELD_WARN_EVERY_S = 5.0   # throttle the "waiting for field" warning to once
 
 
 def main():
-    setup_logging(level="INFO")
+    setup_logging()
     log.info("GolfBot starting...")
 
     # Load models and open the camera.
@@ -56,7 +56,7 @@ def main():
 
     controller    = GolfBotController()
     last_corners  = None
-    last_no_field = 0.0   # when we last warned about missing field corners
+    last_no_field = 2.0   # when we last warned about missing field corners
 
     try:
         while True:

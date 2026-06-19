@@ -21,6 +21,7 @@ numbers (also written to the log file; run with LOG_LEVEL=DEBUG to see them).
 """
 
 from enum import Enum, auto
+import math
 import time
 
 import controller.ev3_controller as robot
@@ -44,8 +45,29 @@ from config import (
     MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
+    COLLECT_EDGE_X_MIN, COLLECT_EDGE_X_MAX, COLLECT_EDGE_Y_MIN,
+    COLLECT_EDGE_Y_MAX, COLLECT_EDGE_OFFSET,
+    MARKER_TO_CLAW_CM, CLAW_HEIGHT_CM,
 )
 from golfbot_logger import get_logger
+
+
+_MARKER_TO_CLAW_PX = MARKER_TO_CLAW_CM * (WARPED_WIDTH / 180.0)  # 5 px/cm
+
+
+def _claw_tip(robot_px, robot_angle_deg):
+    """Floor-projected claw tip: forward from the corrected marker position."""
+    rad = math.radians(robot_angle_deg)
+    return (robot_px[0] + _MARKER_TO_CLAW_PX * math.cos(rad),
+            robot_px[1] + _MARKER_TO_CLAW_PX * math.sin(rad))
+
+
+def _collect_radius(ball_px) -> int:
+    """Return the collect radius for a ball, with a position-based offset for edge zones."""
+    x, y = ball_px
+    in_edge = (x < COLLECT_EDGE_X_MIN or x > COLLECT_EDGE_X_MAX or
+               y < COLLECT_EDGE_Y_MIN or y > COLLECT_EDGE_Y_MAX)
+    return COLLECT_RADIUS_PX + (COLLECT_EDGE_OFFSET if in_edge else 0)
 
 log = get_logger(__name__)
 
@@ -210,8 +232,15 @@ class GolfBotController:
                           self._avoid_target[0], self._avoid_target[1], len(self._corner_waypoints))
             return Command.STOP
 
-        # Staged approach finished → head straight in to the ball.
+        # Staged approach finished → align to the approach heading, then head straight in.
         if self._is_wall_ball:
+            if self._corner_approach_angle is not None:
+                heading_err = angle_error(pose.angle, self._corner_approach_angle)
+                if abs(heading_err) > ALIGN_THRESHOLD_DEG:
+                    direction = Command.RIGHT if heading_err > 0 else Command.LEFT
+                    rotations = angle_to_rotations(heading_err)
+                    log.debug("Pre-approach align %.1f° %s", abs(heading_err), direction.name)
+                    self._driver.turn(pose, rotations, direction)
             log.debug("Staging complete — heading in to the ball")
             self._corner_approach_angle = None
             self._avoid_target = None
@@ -234,11 +263,24 @@ class GolfBotController:
             self._transition(State.SEEK)
             return Command.STOP
 
-        command, arrived = self._driver.drive_toward(pose, target.px, COLLECT_RADIUS_PX)
-        if not arrived:
+        # Use the claw tip (not the marker) as the reference for arrival.
+        # In floor-projected space the scale is uniform so projecting by
+        # MARKER_TO_CLAW_PX along the corrected heading gives the true claw position.
+        claw      = _claw_tip(pose.px, pose.angle)
+        claw_dist = distance_px(claw, target.px)
+
+        if claw_dist > _collect_radius(target.px):
+            # Not arrived — drive toward ball.  Pass arrive_radius such that
+            # drive_toward coasts approximately to where the claw will be at
+            # collect distance (marker→ball ≈ claw→ball + MARKER_TO_CLAW_PX).
+            drive_arrive = _collect_radius(target.px) + _MARKER_TO_CLAW_PX
+            command, _ = self._driver.drive_toward(pose, target.px, drive_arrive)
             return command
 
-        # Within reach — turn in place if we're not actually pointed at the ball.
+        # Claw within collect range — check we're actually pointed at the ball.
+        # Use the marker (rotation centre) for the bearing, not the claw tip.
+        # The claw tip sweeps an arc during in-place turns, which shifts the
+        # computed bearing on every frame and causes oscillation.
         heading_error = angle_error(pose.angle, angle_to_target(pose.px, target.px))
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_error > 0 else Command.LEFT
@@ -250,6 +292,16 @@ class GolfBotController:
 
     def _grab_ball(self, pose) -> Command:
         """Close the claw on the locked target and return to SEEK."""
+        target  = self._locked_target
+        claw    = _claw_tip(pose.px, pose.angle)
+        dist    = distance_px(claw, target.px)
+        deg_off = angle_error(pose.angle, angle_to_target(claw, target.px))
+        log.debug(
+            "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) "
+            "claw→ball=%.1f px, %.1f° off (radius=%d)",
+            claw[0], claw[1], target.px[0], target.px[1],
+            dist, deg_off, _collect_radius(target.px),
+        )
         log.info("Collected ball")
         self._locked_target = None
         self._route.advance()

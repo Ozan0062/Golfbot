@@ -263,7 +263,7 @@ class GolfBotController:
         dx   = abs(claw[0] - target.px[0])
         dy   = abs(claw[1] - target.px[1])
 
-        if dx > COLLECT_RADIUS_PX or dy > COLLECT_RADIUS_PX:
+        if math.hypot(dx, dy) > COLLECT_RADIUS_PX: # Calculate hypotenuse of x-y (Radius)
             drive_arrive = COLLECT_RADIUS_PX + _MARKER_TO_CLAW_PX
             command, arrived = self._driver.drive_toward(pose, target.px, drive_arrive)
             if not arrived:

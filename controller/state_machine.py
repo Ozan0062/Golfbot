@@ -266,14 +266,22 @@ class GolfBotController:
         # Use the claw tip (not the marker) as the reference for arrival.
         # In floor-projected space the scale is uniform so projecting by
         # MARKER_TO_CLAW_PX along the corrected heading gives the true claw position.
-        claw      = _claw_tip(pose.px, pose.angle)
-        claw_dist = distance_px(claw, target.px)
+        claw   = _claw_tip(pose.px, pose.angle)
+        radius = _collect_radius(target.px)
+        dx     = abs(claw[0] - target.px[0])
+        dy     = abs(claw[1] - target.px[1])
 
-        if claw_dist > _collect_radius(target.px):
+        if dx > radius or dy > radius:
             # Not arrived — drive toward ball.  Pass arrive_radius such that
             # drive_toward coasts approximately to where the claw will be at
             # collect distance (marker→ball ≈ claw→ball + MARKER_TO_CLAW_PX).
-            drive_arrive = _collect_radius(target.px) + _MARKER_TO_CLAW_PX
+            drive_arrive = radius + _MARKER_TO_CLAW_PX
+            command, _ = self._driver.drive_toward(pose, target.px, drive_arrive)
+            return command
+
+        # Fine gate: require within COLLECT_RADIUS_PX in both axes even for edge balls.
+        if dx > COLLECT_RADIUS_PX or dy > COLLECT_RADIUS_PX:
+            drive_arrive = COLLECT_RADIUS_PX + _MARKER_TO_CLAW_PX
             command, _ = self._driver.drive_toward(pose, target.px, drive_arrive)
             return command
 
@@ -294,13 +302,14 @@ class GolfBotController:
         """Close the claw on the locked target and return to SEEK."""
         target  = self._locked_target
         claw    = _claw_tip(pose.px, pose.angle)
-        dist    = distance_px(claw, target.px)
-        deg_off = angle_error(pose.angle, angle_to_target(claw, target.px))
+        dx      = claw[0] - target.px[0]
+        dy      = claw[1] - target.px[1]
+        deg_off = angle_error(pose.angle, angle_to_target(pose.px, target.px))
         log.debug(
             "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) "
-            "claw→ball=%.1f px, %.1f° off (radius=%d)",
+            "Δx=%.1f Δy=%.1f px, %.1f° off (radius=%d)",
             claw[0], claw[1], target.px[0], target.px[1],
-            dist, deg_off, _collect_radius(target.px),
+            dx, dy, deg_off, _collect_radius(target.px),
         )
         log.info("Collected ball")
         self._locked_target = None

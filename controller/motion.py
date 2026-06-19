@@ -79,11 +79,13 @@ class Driver:
         self._pose = pose_cache
 
     def drive(self, pose, rotations):
+        rotations = max(rotations, 0.05)
         self._cal.record_drive(pose.px, rotations)
         robot.drive(rotations)
         self._pose.invalidate()
 
     def turn(self, pose, rotations, direction):
+        rotations = max(rotations, 0.1)
         self._cal.record_turn(pose.angle, rotations, direction.name)
         robot.turn(rotations, direction.name)
         self._pose.invalidate()

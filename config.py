@@ -41,9 +41,12 @@ TURN_DAMPING        = 0.6    # scale turns down to avoid oscillation when close
 MARKER_TO_CLAW_CM = 16.8     # physical distance from ArUco marker centre to claw tip (cm)
 CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm) — used for parallax correction
 
-COLLECT_RADIUS_PX = 10       # claw-tip → ball distance at which we grab (open field).
-                             # ~6 cm: ball radius (2 cm) + detection/projection jitter.
+COLLECT_RADIUS_PX = 5        # claw-tip → ball: max pixels in BOTH x and y to trigger grab.
                              # NOTE: this is measured from the claw tip, NOT the marker.
+COLLECT_ANGLE_DEG = 5.0      # max angular offset (deg) in x AND y, measured from the
+                             # marker using the arm length as reference, before grabbing.
+COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correction nudge,
+                             # so the motor command is always large enough to execute.
 
 # Position-based collect radius offsets.
 # A small additional tolerance for balls near the field edges where

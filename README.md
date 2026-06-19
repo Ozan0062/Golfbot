@@ -22,6 +22,7 @@ The PC runs the vision pipeline and controller. The EV3 brick runs a socket serv
 Golfbot/
 ├── main.py                          ← entry point, camera loop
 ├── config.py                        ← all shared constants
+├── gate_calibration_tool.py         ← interactive gate-motor calibration (on the brick)
 ├── requirements.txt
 │
 ├── vision/
@@ -30,18 +31,18 @@ Golfbot/
 │   ├── detector.py                  ← YOLO object detection (balls, cross)
 │   ├── aruco.py                     ← ArUco marker detection (robot pose)
 │   ├── tracker.py                   ← pixel→cm conversion, world dict assembly
-│   ├── calibration.py               ← camera lens calibration
+│   ├── lens_calibration.py          ← camera lens calibration
 │   └── models/                      ← YOLO .onnx models
 │
 ├── controller/
 │   ├── state_machine.py             ← FSM: SEEK→AVOID→ALIGN→APPROACH→...→DONE
 │   ├── navigation.py                ← angle math, path clearance, wall/corner geometry
-│   ├── route_manager.py             ← ball ordering (Christofides TSP, white-first)
+│   ├── route_manager.py             ← ball selection (nearest white first, then orange)
 │   ├── ev3_controller.py            ← TCP commands to EV3
+│   ├── drive_calibration.py         ← drive/turn calibration math
 │   ├── calibration_manager.py       ← runtime drive/turn calibration
 │   ├── calibration_tracker.py       ← EMA ratio tracking (px/rot, deg/rot)
 │   ├── pose_cache.py                ← caches robot pose between detections
-│   ├── tsp_christofides.py          ← 1.5-approx TSP solver
 │   ├── commands.py                  ← Command enum
 │   └── controller_guide.md          ← controller TLDR
 │
@@ -49,6 +50,7 @@ Golfbot/
 │   ├── ev3_server.py                ← socket server on the EV3 brick
 │   └── deploy.bat                   ← deploy to brick via SCP
 │
+├── scripts/                         ← standalone tools + live tests (python -m scripts.<name>)
 └── test/                            ← hardware and integration tests
 ```
 

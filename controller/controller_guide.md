@@ -13,7 +13,7 @@ REVERSE_WHITE → REVERSE_ORANGE → DRIVE_GOAL → RELEASE → DONE (endgame)
 
 ## Key decisions in SEEK
 
-1. Lock a target ball (white first via Christofides TSP, then orange)
+1. Lock the nearest target ball (white balls first, then orange)
 2. Cross blocking the path? → AVOID waypoint (perpendicular dodge)
 3. Ball near a wall? → AVOID to staging point (perpendicular approach)
 4. Ball in a corner? → AVOID to staging point (45° diagonal approach)
@@ -25,13 +25,12 @@ REVERSE_WHITE → REVERSE_ORANGE → DRIVE_GOAL → RELEASE → DONE (endgame)
 |---|---|
 | `state_machine.py` | FSM logic, all state transitions |
 | `navigation.py` | Math helpers: angles, path clearance, zone classification, staging points |
-| `route_manager.py` | Ball ordering: Christofides on whites, then orange |
+| `route_manager.py` | Ball selection: nearest white first, then orange |
 | `ev3_controller.py` | TCP commands to EV3 brick |
 | `calibration_manager.py` | Runtime drive/turn calibration |
 | `calibration_tracker.py` | EMA-based ratio tracking (px/rot, deg/rot) |
 | `pose_cache.py` | Caches robot pose between ArUco detections |
 | `commands.py` | Command enum |
-| `tsp_christofides.py` | 1.5-approx TSP solver |
 
 ## World dict
 

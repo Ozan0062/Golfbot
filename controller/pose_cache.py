@@ -15,13 +15,17 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+from golfbot_logger import get_logger
+
+log = get_logger(__name__)
+
 POSE_TIMEOUT_S = 0.5 # If the ArUco marker hasn't been seen for this long, consider the pose unknown.
 SETTLE_S = 0.2  # After a blocking move, ignore ArUco readings for this long to let the robot settle before trusting the pose again.
 
 
 @dataclass
 class Pose:
-    pos:   tuple   # (x, y) in cm — used for angle and TSP maths
+    pos:   tuple   # (x, y) in cm — used for angle/bearing maths
     px:    tuple   # (x, y) in pixels — used for drive distance
     angle: float   # heading in degrees
 
@@ -49,13 +53,12 @@ class PoseCache:
         now = time.time()
 
         if now < self._valid_after:
-            remaining = self._valid_after - now
-            print(f"[POSE] Settling — ignoring detection, {remaining*1000:.0f}ms left")
+            log.debug("Settling — ignoring detection, %.0f ms left", (self._valid_after - now) * 1000)
             return None
 
         # First frame after settle window expires
         if self._pose is None and self._valid_after > 0:
-            print(f"[POSE] Settle complete — waiting for ArUco")
+            log.debug("Settle complete — waiting for ArUco")
 
         if world.get("robot") is not None and world.get("robot_angle") is not None:
             was_empty = self._pose is None
@@ -66,7 +69,8 @@ class PoseCache:
             )
             self._last_seen = now
             if was_empty:
-                print(f"[POSE] Fresh lock — angle={self._pose.angle:.1f}°  pos={self._pose.pos}  px={self._pose.px}")
+                log.debug("Fresh lock — angle=%.1f°  pos=%s  px=%s",
+                          self._pose.angle, self._pose.pos, self._pose.px)
 
         if self._pose is None:
             return None

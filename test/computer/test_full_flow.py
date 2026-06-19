@@ -1,5 +1,5 @@
 """
-test_full_flow.py -- Step-through test: closest-ball, no Christofides.
+test_full_flow.py -- Step-through test: nearest-ball selection.
 Press ENTER to advance. Run: python test/computer/test_full_flow.py
 If stale-pyc errors, delete controller/__pycache__ and retry.
 

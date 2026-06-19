@@ -10,7 +10,7 @@ from controller.route_manager import RouteManager
 from controller import state_machine
 
 class State(Enum):
-    SEEK           = auto()   # acquire next target from TSP route
+    SEEK           = auto()   # acquire next target (nearest ball)
     AVOID          = auto()   # drive to waypoint to get around cross
     ALIGN          = auto()   # turn to face the locked target
     APPROACH       = auto()   # drive toward the locked target

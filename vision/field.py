@@ -1,13 +1,17 @@
-# vision/field.py — detect field corners and warp to top-down view
-#
-# Run standalone to test field detection:
-#   python -m vision.field
+"""
+field.py — detect field corners and warp the field to a top-down view.
+
+Standalone live test (detect corners, press 'w' to warp):
+    python -m scripts.field_detect
+"""
+
+import sys
+sys.path.append(".")
 
 import cv2
 import numpy as np
 from ultralytics import YOLO
-import sys
-sys.path.append(".")
+
 from config import FIELD_MODEL_PATH, CONFIDENCE_THRESHOLD, WARPED_WIDTH, WARPED_HEIGHT
 
 
@@ -35,7 +39,7 @@ def sort_corners(corners):
     """
     pts = np.array(corners, dtype=np.float32)
 
-    #Handle only 4 corners
+    # Handle only 4 corners
     while len(pts) > 4:
         centroid = pts.mean(axis=0)
         dists = np.linalg.norm(pts - centroid, axis=1)
@@ -82,47 +86,3 @@ def detect_field(field_model, frame, last_corners):
     if len(corners) >= 4:
         return sort_corners(corners)
     return last_corners
-
-
-# ── Standalone test ─────────────────────────────────
-#Opens camera, detects field corners live, draws them, warps on 'w' press.
-if __name__ == "__main__":
-    from vision.camera import open_camera, grab_frame, release
-
-    cap = open_camera()
-    model = load_field_model()
-    print("Field detection running. Press 'w' to warp, ESC to quit.")
-
-    while True:
-        frame = grab_frame(cap)
-        display = frame.copy()
-
-        corners = detect_corners(model, frame)
-
-        #Draw detected corners
-        for (cx, cy) in corners:
-            cv2.circle(display, (int(cx), int(cy)), 8, (0, 255, 0), -1)
-
-        if len(corners) >= 4:
-            sorted_c = sort_corners(corners)
-            #Draw the field outline
-            pts = sorted_c.astype(int).reshape((-1, 1, 2))
-            cv2.polylines(display, [pts], True, (0, 255, 0), 2)
-            cv2.putText(display, f"{len(corners)} corners found", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        else:
-            cv2.putText(display, f"Only {len(corners)} corners...", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-        cv2.imshow("Field Detection", display)
-
-        key = cv2.waitKey(1) & 0xFF
-        if key == 27:
-            break
-        elif key == ord("w") and len(corners) >= 4:
-            warped, _ = warp_field(frame, sort_corners(corners))
-            cv2.imshow("Warped Field", warped)
-            cv2.imwrite("warped_field.jpg", warped)
-            print("Saved warped_field.jpg")
-
-    release(cap)

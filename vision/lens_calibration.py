@@ -1,24 +1,29 @@
-# vision/calibration.py — camera calibration for lens distortion correction
-#
-# Step 1: Print a checkerboard pattern (9x6 inner corners)
-# Step 2: Run: python -m vision.calibration capture
-#         Hold the checkerboard in front of the camera, press SPACE to capture (10-15 images)
-# Step 3: Run: python -m vision.calibration calibrate
-#         Computes and saves calibration to vision/calibration_data.npz
-# Step 4: Done — the pipeline automatically loads and applies undistortion
+"""
+lens_calibration.py — camera lens-distortion calibration.
+
+Workflow (run the tool from the repo root):
+    1. Print a 9x6 inner-corner checkerboard.
+    2. python -m scripts.lens_calibration_tool capture    — capture 10-15 images
+    3. python -m scripts.lens_calibration_tool calibrate  — compute + save calibration
+    4. Done — main.py loads vision/calibration_data.npz and undistorts automatically.
+
+This module holds the calibration functions; the interactive CLI lives in
+scripts/lens_calibration_tool.py.
+"""
+
+import os
+import glob
+import sys
+sys.path.append(".")
 
 import cv2
 import numpy as np
-import os
-import sys
-import glob
-sys.path.append(".")
 
 CALIBRATION_DIR = "vision/calibration_images"
 CALIBRATION_FILE = "vision/calibration_data.npz"
 
-# Checkerboard dimensions (inner corners, not squares)
-# Standard printable checkerboard: 10x7 squares = 9x6 inner corners
+# Checkerboard dimensions (inner corners, not squares).
+# Standard printable checkerboard: 10x7 squares = 9x6 inner corners.
 CHECKERBOARD = (9, 6)
 
 
@@ -148,47 +153,3 @@ def undistort_frame(frame, undist_maps):
     if undist_maps is not None:
         return remap(frame, *undist_maps)
     return frame
-
-
-# ── CLI ─────────────────────────────────────────────
-if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in ("capture", "calibrate", "test"):
-        print("Usage:")
-        print("  python -m vision.calibration capture    — take checkerboard photos")
-        print("  python -m vision.calibration calibrate  — compute calibration")
-        print("  python -m vision.calibration test       — show undistorted live feed")
-        sys.exit(1)
-
-    cmd = sys.argv[1]
-
-    if cmd == "capture":
-        capture_checkerboard_images()
-
-    elif cmd == "calibrate":
-        calibrate()
-
-    elif cmd == "test":
-        from vision.camera import open_camera, grab_frame, release
-        mtx, dist = load_calibration()
-        if mtx is None:
-            print("No calibration found. Run 'capture' then 'calibrate' first.")
-            sys.exit(1)
-
-        cap = open_camera()
-        print("Showing raw (left) vs undistorted (right). Press ESC to quit.")
-
-        while True:
-            frame = grab_frame(cap)
-            corrected = undistort(frame, mtx, dist)
-
-            combined = np.hstack([frame, corrected])
-            cv2.putText(combined, "Raw", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.putText(combined, "Undistorted", (frame.shape[1] + 10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.imshow("Calibration Test", combined)
-
-            if cv2.waitKey(1) & 0xFF == 27:
-                break
-
-        release(cap)

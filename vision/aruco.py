@@ -1,11 +1,16 @@
-# vision/aruco.py — detect robot position and heading via ArUco marker
-#
-# Run standalone to test: python -m vision.aruco
+"""
+aruco.py — detect robot position and heading via its ArUco marker.
+
+Standalone live test (also regenerates the printable marker):
+    python -m scripts.aruco_test
+"""
+
+import sys
+sys.path.append(".")
 
 import cv2
 import numpy as np
-import sys
-sys.path.append(".")
+
 from config import ARUCO_DICT, ARUCO_MARKER_ID
 
 
@@ -88,33 +93,3 @@ def generate_marker(marker_id=0, size=200, filename="aruco_marker.png"):
     cv2.imwrite(filename, bordered)
     print(f"Saved marker ID {marker_id} to {filename} — print this and stick it on the robot")
     return bordered
-
-
-# ── Standalone test ─────────────────────────────────
-if __name__ == "__main__":
-    from vision.camera import open_camera, grab_frame, release
-
-    # Generate printable marker
-    generate_marker()
-
-    cap = open_camera()
-    detector = create_detector()
-    print("ArUco detection running. Press ESC to quit.")
-
-    while True:
-        frame = grab_frame(cap)
-        center, angle = detect_robot(detector, frame)
-
-        if center:
-            frame = draw_robot(frame, center, angle)
-            cv2.putText(frame, f"pos=({center[0]:.0f},{center[1]:.0f}) angle={angle:.0f}",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        else:
-            cv2.putText(frame, "No marker found", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-        cv2.imshow("ArUco Test", frame)
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
-
-    release(cap)

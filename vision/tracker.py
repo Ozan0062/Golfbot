@@ -29,7 +29,7 @@ import numpy as np
 from config import (FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
                     CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM)
 from vision.aruco import detect_robot
-
+        
 
 def pixels_to_cm(detections, image_width, image_height,
                  field_w=FIELD_WIDTH_CM, field_h=FIELD_HEIGHT_CM):
@@ -40,11 +40,12 @@ def pixels_to_cm(detections, image_width, image_height,
     scale_x = field_w / image_width
     scale_y = field_h / image_height
 
+    import copy
     results = []
     for det in detections:
-        cx, cy = det["center"]
-        det_copy = dict(det)
-        det_copy["position_cm"] = (cx * scale_x, cy * scale_y)
+        cx, cy = det.center
+        det_copy = copy.copy(det)
+        det_copy.position_cm = (cx * scale_x, cy * scale_y)
         results.append(det_copy)
 
     return results
@@ -190,11 +191,13 @@ def filter_detections_near_robot(detections, robot_center_px, radius=None):
     if robot_center_px is None:
         return detections
     rx, ry = robot_center_px
-    return [
-        d for d in detections
-        if d["class_name"] not in ("wb", "ob")
-        or math.dist(d["center"], (rx, ry)) > radius
-    ]
+    filtered = []
+    for d in detections:
+        dist = math.dist(d.center, (rx, ry))
+        d.set_dist_from_robot(dist)
+        if d.class_name not in ("wb", "ob") or dist > radius:
+            filtered.append(d)
+    return filtered
 
 
 def build_world_dict(detections, robot_center, robot_angle, image_w, image_h):
@@ -236,18 +239,18 @@ def extract_objects(detections_cm):
     best_cross_conf = 0.0   # confidence of the cross kept so far
 
     for det in detections_cm:
-        name   = det["class_name"]
-        pos_cm = det["position_cm"]
-        pos_px = det["center"]          # original pixel coords from YOLO
+        name   = det.class_name
+        pos_cm = det.position_cm
+        pos_px = det.center          # original pixel coords from YOLO
 
         if name == "wb":
             objects["white_balls"].append(pos_cm)
             objects["white_balls_px"].append(pos_px)
-        elif name == "ob" and (objects["ob"] is None or det["confidence"] > best_ob_conf):
+        elif name == "ob" and (objects["ob"] is None or det.confidence > best_ob_conf):
             objects["ob"], objects["ob_px"] = pos_cm, pos_px
-            best_ob_conf = det["confidence"]
-        elif name == "cross" and (objects["cross"] is None or det["confidence"] > best_cross_conf):
+            best_ob_conf = det.confidence
+        elif name == "cross" and (objects["cross"] is None or det.confidence > best_cross_conf):
             objects["cross"], objects["cross_px"] = pos_cm, pos_px
-            best_cross_conf = det["confidence"]
+            best_cross_conf = det.confidence
 
     return objects

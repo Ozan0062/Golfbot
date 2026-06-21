@@ -197,10 +197,10 @@ def main():
 
             seen = []
             for det in detections:
-                name = det["class_name"]
+                name = det.class_name
                 if name in ("wb", "ob"):
                     corrected = correct_robot_height(
-                        det["center"], CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, BALL_HEIGHT_CM,
+                        det.center, CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, BALL_HEIGHT_CM,
                         w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
                     )
                     seen.append((name, corrected))

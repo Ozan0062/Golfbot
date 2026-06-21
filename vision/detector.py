@@ -12,6 +12,19 @@ import sys
 sys.path.append(".")
 from config import OBJECT_MODEL_PATH, CONFIDENCE_THRESHOLD, CLASS_NAMES
 
+class Node_object:
+    def __init__(self, class_name, center:tuple[float,float], size:tuple[float,float], dist_from_robot:float=0.0, confidence:float=0.0, class_id:int=-1, position_cm:tuple[float,float]=None):
+        self.class_name = class_name
+        self.center = center
+        self.size = size
+        self.dist_from_robot = dist_from_robot
+        self.confidence = confidence
+        self.class_id = class_id
+        self.position_cm = position_cm
+    
+    def set_dist_from_robot(self, dist_from_robot:float):
+        self.dist_from_robot = dist_from_robot
+        
 
 def load_object_model(path=OBJECT_MODEL_PATH):
     """Load object ONNX model"""
@@ -30,13 +43,13 @@ def detect_objects(model, frame, conf=CONFIDENCE_THRESHOLD):
     for box in results[0].boxes:
         cls_id = int(box.cls[0].item())
         xywh = box.xywh[0].cpu().numpy()
-        det = {
-            "class_id": cls_id,
-            "class_name": CLASS_NAMES.get(cls_id, f"unknown_{cls_id}"),
-            "center": (float(xywh[0]), float(xywh[1])),
-            "size": (float(xywh[2]), float(xywh[3])),
-            "confidence": float(box.conf[0].item()),
-        }
+        det = Node_object(
+            class_name=CLASS_NAMES.get(cls_id, f"unknown_{cls_id}"),
+            center=(float(xywh[0]), float(xywh[1])),
+            size=(float(xywh[2]), float(xywh[3])),
+            confidence=float(box.conf[0].item()),
+            class_id=cls_id
+        )
         detections.append(det)
 
     return detections
@@ -46,8 +59,8 @@ def draw_detections(frame, detections):
     """Draw bounding boxes and labels on a frame (for debugging)."""
     display = frame.copy()
     for det in detections:
-        cx, cy = det["center"]
-        w, h = det["size"]
+        cx, cy = det.center
+        w, h = det.size
         x1, y1 = int(cx - w / 2), int(cy - h / 2)
         x2, y2 = int(cx + w / 2), int(cy + h / 2)
 
@@ -55,10 +68,10 @@ def draw_detections(frame, detections):
             "cross": (0, 0, 255),
             "ob": (0, 165, 255),
             "wb": (255, 255, 255),
-        }.get(det["class_name"], (128, 128, 128))
+        }.get(det.class_name, (128, 128, 128))
 
         cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
-        label = f"{det['class_name']} {det['confidence']:.0%}"
+        label = f"{det.class_name} {det.confidence:.0%}"
         cv2.putText(display, label, (x1, y1 - 6),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 

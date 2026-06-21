@@ -26,7 +26,7 @@ def main():
 
     print(f"\nFound {len(detections)} objects:")
     for det in detections:
-        print(f"  {det['class_name']:12s} at ({det['center'][0]:.0f}, {det['center'][1]:.0f})  conf={det['confidence']:.0%}")
+        print(f"  {det.class_name:12s} at ({det.center[0]:.0f}, {det.center[1]:.0f})  conf={det.confidence:.0%}")
 
     display = draw_detections(frame, detections)
     cv2.imshow("Detections", display)

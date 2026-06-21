@@ -21,7 +21,7 @@ from golfbot_logger import get_logger
 
 log = get_logger(__name__)
 
-HOST = "10.233.49.35"   # EV3 IP over WiFi
+HOST = "172.16.114.35"   # EV3 IP over WiFi
 PORT = 5000
 RECV_TIMEOUT_S = 60.0   # Seconds to wait for a response before giving up (for blocking commands)
 

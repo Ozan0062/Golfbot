@@ -6,6 +6,7 @@ Uses fake YOLO detections to verify navigation inputs without camera/model hardw
 import unittest
 
 from vision.tracker import extract_objects, pixels_to_cm
+from config import FIELD_WIDTH_CM, FIELD_HEIGHT_CM
 
 
 class VisionWorldIntegrationTests(unittest.TestCase):
@@ -23,11 +24,11 @@ class VisionWorldIntegrationTests(unittest.TestCase):
 
         world = extract_objects(pixels_to_cm(detections, 640, 480))
 
-        self.assertTupleAlmostEqual(world["white_balls"][0], (90.0, 60.0))
+        self.assertTupleAlmostEqual(world["white_balls"][0], (FIELD_WIDTH_CM / 2, FIELD_HEIGHT_CM / 2))
         self.assertEqual(world["white_balls_px"], [(320, 240)])
-        self.assertTupleAlmostEqual(world["ob"], (180.0, 120.0))
+        self.assertTupleAlmostEqual(world["ob"], (FIELD_WIDTH_CM, FIELD_HEIGHT_CM))
         self.assertEqual(world["ob_px"], (640, 480))
-        self.assertTupleAlmostEqual(world["cross"], (45.0, 30.0))
+        self.assertTupleAlmostEqual(world["cross"], (FIELD_WIDTH_CM / 4, FIELD_HEIGHT_CM / 4))
         self.assertEqual(world["cross_px"], (160, 120))
 
 

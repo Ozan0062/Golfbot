@@ -8,21 +8,23 @@ CAMERA_WIDTH  = 640
 CAMERA_HEIGHT = 480
 
 # --- Field -------------------------------------------------------------------
-FIELD_WIDTH_CM  = 180.0
-FIELD_HEIGHT_CM = 120.0
+FIELD_WIDTH_CM  = 169.0
+FIELD_HEIGHT_CM = 124.5
 
-# Warped (top-down) image dimensions. 3:2 ratio matches the 180×120 field.
+# Warped (top-down) image dimensions. NOTE: 900x600 is 3:2, which does NOT match
+# the 170x124.5 field, so warped px/cm is anisotropic. Angle maths is done in cm
+# (see controller/navigation.py) so this mismatch no longer biases headings.
 WARPED_WIDTH  = 900
 WARPED_HEIGHT = 600
 
 # --- Parallax / height correction (cm) ---------------------------------------
-CAMERA_HEIGHT_CM       = 179.5
+CAMERA_HEIGHT_CM       = 178.0
 ROBOT_MARKER_HEIGHT_CM = 19.8    # ArUco marker height above the field
 
 # The point on the field the camera hangs directly above, in warped pixels.
-# Scaled from (312, 303) in the old 640×480 view to 900×600.
-# Re-measure in the 900×600 warped image if you need more precision.
-CAMERA_CENTER_PX = (456, 353)
+# Scaled from (312, 303) in the old 640x480 view to 900x600.
+# Re-measure in the 900x600 warped image if you need more precision.
+CAMERA_CENTER_PX = (439, 358)
 
 # --- Navigation safety -------------------------------------------------------
 # Keep the robot centre at least this far from the field edges while collecting.
@@ -31,18 +33,24 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 
 # Goal: left wall, vertically centred.
 GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
-GOAL_POSITION_PX = (35, 300)   # claw target coordinate at the goal
+GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive
 MIN_TURN_ROTATIONS  = 0.25   # ignore turns smaller than this
 TURN_DAMPING        = 0.6    # scale turns down to avoid oscillation when close
 
-MARKER_TO_CLAW_CM = 16.8     # physical distance from ArUco marker centre to claw tip (cm)
-CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm) — used for parallax correction
+MARKER_TO_CLAW_CM = 16.8     # HORIZONTAL (floor-plane) offset from the ArUco marker
+                             # centre to the claw tip, in cm. Measure floor-to-floor
+                             # (point under the marker -> point under the claw tip),
+                             # NOT the 3D slant from the 19.8 cm marker to the 7.5 cm tip.
+CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm). Informational only --
+                             # the claw's floor position is derived geometrically from the
+                             # marker, so no separate parallax step is applied to it.
 
-COLLECT_RADIUS_PX = 5        # claw-tip → ball: max pixels in BOTH x and y to trigger grab.
-                             # NOTE: this is measured from the claw tip, NOT the marker.
+COLLECT_RADIUS_CM = 1.0      # claw-tip -> ball distance (cm) at which we grab.
+COLLECT_RADIUS_PX = 5        # legacy pixel radius (kept for tooling/tests; the live
+                             # collect check is COLLECT_RADIUS_CM, measured in cm).
 COLLECT_ANGLE_DEG = 5.0      # max angular offset (deg) in x AND y, measured from the
                              # marker using the arm length as reference, before grabbing.
 COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correction nudge,
@@ -60,13 +68,13 @@ AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to
 
 WALL_MARGIN_PX      = 120    # a ball this close to a wall needs a staged approach
 STAGING_DISTANCE_PX = 170    # standoff for the final straight-in approach.
-                             # Must be >= WALL_MARGIN_PX / cos(45°) ≈ 170 so corner
+                             # Must be >= WALL_MARGIN_PX / cos(45deg) ~= 170 so corner
                              # staging points land outside the margin on both axes.
 
 # Two staging points per wall/corner ball: 2x then 1x the staging distance.
 CORNER_STAGE_DISTANCES_PX = (STAGING_DISTANCE_PX * 2, STAGING_DISTANCE_PX)
 FIELD_EDGE_MARGIN_PX = 30    # keep staging waypoints this far inside the field edges
-GOAL_APPROACH_ANGLE_DEG = 180.0   # goal is on the left wall → approach heading left
+GOAL_APPROACH_ANGLE_DEG = 180.0   # goal is on the left wall -> approach heading left
 
 # --- YOLO models -------------------------------------------------------------
 BASE_DIR          = os.path.dirname(os.path.abspath(__file__))

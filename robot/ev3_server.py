@@ -61,25 +61,30 @@ while True:
 
         if cmd == "FORWARD":
             drive_forward(float(parts[1]))
+            conn.sendall(b"OK")
 
         elif cmd == "BACKWARD":
             drive_backward(float(parts[1]))
+            conn.sendall(b"OK")
 
         elif cmd == "LEFT":
             turn_left(float(parts[1]))
+            conn.sendall(b"OK")
 
         elif cmd == "RIGHT":
             turn_right(float(parts[1]))
+            conn.sendall(b"OK")
 
         elif cmd == "STOP":
             stop()
+            conn.sendall(b"OK")
 
         elif cmd == "COLLECT":
             claw.collect_ball()
             conn.sendall(b"OK")
 
         elif cmd == "RELEASE":
-            gate.rotate(4, speed=100)    # open
+            gate.rotate(-4, speed=100)    # open
             time.sleep(1)
             gate.rotate(-4, speed=100)   # close
             conn.sendall(b"OK")

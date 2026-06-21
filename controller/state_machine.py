@@ -31,34 +31,44 @@ from controller.calibration_tracker import (
 )
 from controller.commands import Command
 from controller.motion import (
-    Driver, corner_approach_waypoints, distance_px, px_to_rotations, angle_to_rotations,
+    Driver, corner_approach_waypoints, px_to_rotations, angle_to_rotations,
 )
 from controller.navigation import (
     angle_to_target, angle_error, path_is_clear, obstacle_waypoint,
-    classify_zone, wall_approach_angle,
+    classify_zone, wall_approach_angle, px_angle_to_cm,
 )
 from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from config import (
     GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
-    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_PX, GOAL_ARRIVE_PX,
+    FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
+    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, GOAL_ARRIVE_PX,
     GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
     MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
-    MARKER_TO_CLAW_CM, CLAW_HEIGHT_CM,
+    MARKER_TO_CLAW_CM,
 )
 from golfbot_logger import get_logger
 
 
-_MARKER_TO_CLAW_PX = MARKER_TO_CLAW_CM * (WARPED_WIDTH / 180.0)  # 5 px/cm
+# On the final drive-in, stop the marker about one arm-length short of the ball so
+# the claw lands on it. Use the smaller of the two px/cm scales so the claw always
+# reaches the ball (never stalls short) whatever the heading; the precise grab is
+# gated on the cm claw-to-ball distance, not on this coarse pixel arrival.
+_APPROACH_ARRIVE_PX = MARKER_TO_CLAW_CM * min(WARPED_WIDTH / FIELD_WIDTH_CM,
+                                              WARPED_HEIGHT / FIELD_HEIGHT_CM)
 
 
-def _claw_tip(robot_px, robot_angle_deg):
-    """Floor-projected claw tip: forward from the corrected marker position."""
+def _claw_tip_cm(robot_pos_cm, robot_angle_deg):
+    """
+    Claw-tip position on the floor, in cm: MARKER_TO_CLAW_CM forward of the
+    height-corrected marker, along the heading. Exact for any heading because it
+    is computed in cm, not in the anisotropic warped-pixel frame.
+    """
     rad = math.radians(robot_angle_deg)
-    return (robot_px[0] + _MARKER_TO_CLAW_PX * math.cos(rad),
-            robot_px[1] + _MARKER_TO_CLAW_PX * math.sin(rad))
+    return (robot_pos_cm[0] + MARKER_TO_CLAW_CM * math.cos(rad),
+            robot_pos_cm[1] + MARKER_TO_CLAW_CM * math.sin(rad))
 
 
 
@@ -194,7 +204,10 @@ class GolfBotController:
 
         self._avoid_target          = waypoints[0]
         self._corner_waypoints      = waypoints[1:]
-        self._corner_approach_angle = angle
+        # Staging points are placed in pixel space (raw `angle`); the heading we
+        # align to before driving in is the same approach in the cm frame, so the
+        # two agree once pose.angle is physical. Axis-aligned walls are unchanged.
+        self._corner_approach_angle = px_angle_to_cm(angle)
         log.info("%s ball — approaching via %d staging point(s)", zone.capitalize(), len(waypoints))
         log.debug("staging path: %s",
                   "  ->  ".join(f"({w[0]:.0f},{w[1]:.0f})" for w in waypoints))
@@ -259,13 +272,11 @@ class GolfBotController:
         # Use the claw tip (not the marker) as the reference for arrival.
         # In floor-projected space the scale is uniform so projecting by
         # MARKER_TO_CLAW_PX along the corrected heading gives the true claw position.
-        claw = _claw_tip(pose.px, pose.angle)
-        dx   = abs(claw[0] - target.px[0])
-        dy   = abs(claw[1] - target.px[1])
+        claw = _claw_tip_cm(pose.pos, pose.angle)
+        off  = math.hypot(claw[0] - target.cm[0], claw[1] - target.cm[1])
 
-        if math.hypot(dx, dy) > COLLECT_RADIUS_PX: # Calculate hypotenuse of x-y (Radius)
-            drive_arrive = COLLECT_RADIUS_PX + _MARKER_TO_CLAW_PX
-            command, arrived = self._driver.drive_toward(pose, target.px, drive_arrive)
+        if off > COLLECT_RADIUS_CM:
+            command, arrived = self._driver.drive_toward(pose, target.px, _APPROACH_ARRIVE_PX)
             if not arrived:
                 return command
 
@@ -273,7 +284,7 @@ class GolfBotController:
         # Use the marker (rotation centre) for the bearing, not the claw tip.
         # The claw tip sweeps an arc during in-place turns, which shifts the
         # computed bearing on every frame and causes oscillation.
-        heading_error = angle_error(pose.angle, angle_to_target(pose.px, target.px))
+        heading_error = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_error > 0 else Command.LEFT
             log.debug("At the ball but off-heading (%.1f°) — turning %s", heading_error, direction.name)
@@ -285,13 +296,13 @@ class GolfBotController:
     def _grab_ball(self, pose) -> Command:
         """Close the claw on the locked target and return to SEEK."""
         target  = self._locked_target
-        claw    = _claw_tip(pose.px, pose.angle)
-        dx      = claw[0] - target.px[0]
-        dy      = claw[1] - target.px[1]
-        deg_off = angle_error(pose.angle, angle_to_target(pose.px, target.px))
+        claw    = _claw_tip_cm(pose.pos, pose.angle)
+        dx      = claw[0] - target.cm[0]
+        dy      = claw[1] - target.cm[1]
+        deg_off = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
         log.debug(
-            "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) Δx=%.1f Δy=%.1f px, %.1f° off",
-            claw[0], claw[1], target.px[0], target.px[1], dx, dy, deg_off,
+            "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) Δx=%.1f Δy=%.1f cm, %.1f° off",
+            claw[0], claw[1], target.cm[0], target.cm[1], dx, dy, deg_off,
         )
         log.info("Collected ball")
         self._locked_target = None

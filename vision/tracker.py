@@ -167,9 +167,14 @@ def get_true_robot_pose(aruco_detector, raw_frame, homography_matrix,
     )
 
     if center is not None and forward is not None:
+        # Heading in the cm/floor frame, not the anisotropic warped-pixel frame:
+        # scale the forward vector to cm per-axis before taking the angle, so the
+        # reported heading is the robot's true physical heading at any orientation.
+        sx = field_w / warped_w
+        sy = field_h / warped_h
         angle = math.degrees(math.atan2(
-            forward[1] - center[1],
-            forward[0] - center[0],
+            (forward[1] - center[1]) * sy,
+            (forward[0] - center[0]) * sx,
         ))
 
     return center, angle

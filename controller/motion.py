@@ -8,15 +8,17 @@ Keeps the "how to move" details out of state_machine.py:
   * drive_toward(): the single "turn to face a point, else drive toward it" step
     used by every navigating state (AVOID, APPROACH, DRIVE_GOAL).
 
-Because the warped→cm scale is uniform (180/900 == 120/600), a bearing computed
-in pixels equals one computed in cm, so everything here works in pixels.
+The warp canvas is anisotropic (900/170 != 600/124.5 px-per-cm), so a bearing
+taken straight from pixels is distorted with heading. Distances stay in pixels
+(that's what the drive calibration is in), but bearings are taken in cm via
+px_to_cm so they agree with the cm-frame pose.angle.
 """
 
 import math
 
 import controller.ev3_controller as robot
 from controller.commands import Command
-from controller.navigation import angle_to_target, angle_error, staging_point
+from controller.navigation import angle_to_target, angle_error, staging_point, px_to_cm
 from controller.calibration_tracker import (
     calibration_pixels, calibration_angle_left, calibration_angle_right,
 )
@@ -50,13 +52,13 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
     """
     Ordered waypoints along the approach axis for a wall/corner (or goal) ball.
 
-    All stages are always returned (far→close), regardless of the robot's
-    current position.  Each waypoint is clamped to stay inside the field boundary.
+    All stages are always returned (far->close), regardless of the robot's
+    current position. Each waypoint is clamped to stay inside the field boundary.
     """
     angle_rad = math.radians(approach_angle_deg)
 
     waypoints = []
-    for dist in stage_distances:                # already ordered far→close
+    for dist in stage_distances:                # already ordered far->close
         sp = staging_point(ball_px, approach_angle_deg, dist)
         sp = (
             max(margin, min(sp[0], field_w - margin)),
@@ -70,7 +72,7 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
 
 class Driver:
     """
-    Owns the actual motor calls.  Every move records a calibration sample and
+    Owns the actual motor calls. Every move records a calibration sample and
     invalidates the pose cache (so the FSM waits for the robot to settle).
     """
 
@@ -97,19 +99,22 @@ class Driver:
     def drive_toward(self, pose, target_px, arrive_radius):
         """
         One movement step toward target_px: turn to face it, or drive toward it
-        if already aligned.  Returns (command, arrived) where arrived is True
+        if already aligned. Returns (command, arrived) where arrived is True
         once the robot is within arrive_radius (no command issued in that case).
         """
         dist = distance_px(pose.px, target_px)
         if dist <= arrive_radius:
             return Command.STOP, True
 
-        heading_error = angle_error(pose.angle, angle_to_target(pose.px, target_px))
+        # Bearing in cm (not raw pixels) so it matches the cm-frame heading.
+        heading_error = angle_error(
+            pose.angle, angle_to_target(px_to_cm(pose.px), px_to_cm(target_px))
+        )
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             rotations = angle_to_rotations(heading_error)
             if rotations >= MIN_TURN_ROTATIONS:
                 direction = Command.RIGHT if heading_error > 0 else Command.LEFT
-                log.debug("turn %s %.1f° -> %.2f rot", direction.name, abs(heading_error), rotations)
+                log.debug("turn %s %.1f deg -> %.2f rot", direction.name, abs(heading_error), rotations)
                 self.turn(pose, rotations, direction)
                 return direction, False
 

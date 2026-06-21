@@ -6,6 +6,7 @@ Uses mock detections instead of YOLO, camera, or robot hardware.
 import unittest
 
 from vision.tracker import extract_objects, pixels_to_cm, robot_px_to_cm
+from config import FIELD_WIDTH_CM, FIELD_HEIGHT_CM
 
 
 class TrackerUnitTests(unittest.TestCase):
@@ -21,13 +22,13 @@ class TrackerUnitTests(unittest.TestCase):
 
         converted = pixels_to_cm(detections, image_width=640, image_height=480)
 
-        self.assertTupleAlmostEqual(converted[0]["position_cm"], (90.0, 60.0))
+        self.assertTupleAlmostEqual(converted[0]["position_cm"], (FIELD_WIDTH_CM / 2, FIELD_HEIGHT_CM / 2))
 
     def test_robot_px_to_cm_returns_none_when_aruco_is_missing(self):
         self.assertIsNone(robot_px_to_cm(None, image_width=640, image_height=480))
         self.assertTupleAlmostEqual(
             robot_px_to_cm((320, 240), image_width=640, image_height=480),
-            (90.0, 60.0),
+            (FIELD_WIDTH_CM / 2, FIELD_HEIGHT_CM / 2),
         )
 
     def test_extract_objects_builds_world_objects_from_mock_yolo_detections(self):

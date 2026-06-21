@@ -3,10 +3,37 @@ navigation.py — math helpers for the GolfBot controller.
 """
 import math
 
+from config import FIELD_WIDTH_CM, FIELD_HEIGHT_CM, WARPED_WIDTH, WARPED_HEIGHT
+
+# Per-axis warped-pixel -> cm scale. The warp canvas (900x600) does not match the
+# field's aspect ratio (170x124.5), so these two are NOT equal -- px space is
+# anisotropic. Do all *angle* maths in cm to avoid heading-dependent distortion.
+_PX_TO_CM_X = FIELD_WIDTH_CM / WARPED_WIDTH
+_PX_TO_CM_Y = FIELD_HEIGHT_CM / WARPED_HEIGHT
+
+
+def px_to_cm(point_px):
+    """Convert a warped-image pixel point to field cm (per-axis scale)."""
+    return (point_px[0] * _PX_TO_CM_X, point_px[1] * _PX_TO_CM_Y)
+
+
+def px_angle_to_cm(angle_deg):
+    """
+    Re-express a pixel-frame heading as the equivalent physical (cm) heading.
+
+    Identity for axis-aligned headings (0/+-90/180); only diagonals shift, because
+    the anisotropic warp stretches x and y differently. Used so a staging point
+    placed in pixel space and the heading we align to before driving in agree.
+    """
+    rad = math.radians(angle_deg)
+    return math.degrees(math.atan2(_PX_TO_CM_Y * math.sin(rad),
+                                   _PX_TO_CM_X * math.cos(rad)))
+
 
 def angle_to_target(robot_pos, target_pos):
     """
-    Bearing in degrees from robot_pos to target_pos.
+    Bearing in degrees from robot_pos to target_pos. Feed cm coordinates (not
+    raw warped pixels) so the bearing is undistorted by the anisotropic warp.
     """
     dx = target_pos[0] - robot_pos[0]
     dy = target_pos[1] - robot_pos[1]

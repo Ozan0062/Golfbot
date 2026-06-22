@@ -227,7 +227,7 @@ def build_world_state(detections, robot_center, robot_angle, image_w, image_h) -
     Combine YOLO detections and ArUco pose into a single world state.
     Contains both cm (for angle/bearing maths) and px (for drive distances).
     """
-    from controller.Dijkstras import get_path
+    from controller.dijkstras import get_path
     
     world             = extract_objects(pixels_to_cm(detections, image_w, image_h))
     world.robot       = robot_px_to_cm(robot_center, image_w, image_h)

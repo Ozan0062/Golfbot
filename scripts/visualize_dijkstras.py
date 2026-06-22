@@ -8,7 +8,7 @@ import networkx as nx
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from vision.tracker import WorldState
-from controller.Dijkstras import create_nodes_and_edges, calculate_best_route
+from controller.dijkstras import create_nodes_and_edges, calculate_best_route
 
 def draw_state(ax, world):
     """Tegner det nuværende state og returnerer den beregnede rute."""
@@ -137,7 +137,7 @@ def main():
             return (px[0], px[1], cm_coord[2])
         return (px[0], px[1])
 
-    # Generer de falske YOLO pixel-koordinater så de matcher Dijkstras.py's forventninger
+    # Generer de falske YOLO pixel-koordinater så de matcher dijkstras.py's forventninger
     world.robot_px = fake_px(world.robot)
     world.cross_px = fake_px(world.cross)
     world.ob_px = fake_px(world.ob)

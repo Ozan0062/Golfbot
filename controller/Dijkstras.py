@@ -1,6 +1,9 @@
 import math
 import networkx as nx
 
+from config import GOAL_POSITION_PX
+from controller.motion import angle_to_rotations
+from controller.navigation import angle_to_target
 from vision.tracker import WorldState
 
 WALL_BALL_PENALTY = 50.0       # Added weight/cost for balls near walls
@@ -8,6 +11,10 @@ CORNER_BALL_PENALTY = 100.0    # Added weight/cost for balls in corners
 CROSS_BLOCK_PENALTY = 60.0     # Ekstra straf for bolde bag krydset (fra robottens perspektiv)
 CROSS_CLEARANCE_CM = 15.0      # Distance from cross
 
+def angle_rotations(robot_pos_cm,target_pos_cm):
+    angle = angle_to_target(robot_pos_cm, target_pos_cm)
+    rotations = angle_to_rotations(angle)
+    return rotations
 
 def line_intersects_obstacle(robot_coords, ball_coords, cross_coords, clearance=15.0) -> bool:
     """Cheks if robot and ball intersects with cross"""
@@ -57,21 +64,21 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     # 2. Add open field white balls
     for ball in world.white_balls:
         pos_cm = (ball[0], ball[1])
-        penalty = get_cross_penalty(pos_cm)
+        penalty = get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, type="open", penalty=penalty)
         ball_idx += 1
         
     # 3. Add wall white balls
     for ball in world.white_wall_balls:
         pos_cm = (ball[0], ball[1])
-        penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm)
+        penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, type="wall", penalty=penalty)
         ball_idx += 1
         
     # 4. Add corner white balls
     for ball in world.white_corner_balls:
         pos_cm = (ball[0], ball[1])
-        penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm)
+        penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, type="corner", penalty=penalty)
         ball_idx += 1
         
@@ -86,6 +93,7 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             penalty += CORNER_BALL_PENALTY
         G.add_node("ob", pos=pos_cm, type=zone, penalty=penalty)
         
+    G.add_node("goal", pos=GOAL_POSITION_PX, type="goal", penalty=0.0)
     # 6. Create edges between all nodes
     nodes = list(G.nodes(data=True))
     
@@ -128,6 +136,10 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     # Always add the orange ball last
     if G.has_node("ob"):
         path_nodes.append("ob")
+        
+    # Always add the goal as the absolute final destination
+    if G.has_node("goal"):
+        path_nodes.append("goal")
         
     # Format output with positions and types
     result = []

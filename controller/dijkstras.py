@@ -136,10 +136,12 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     except nx.NodeNotFound:
         return []
         
-    # Find all white balls and sort them by Dijkstra distance.
-    # get(n, inf) ensures that potentially unreachable balls are placed last.
-    white_balls = [n for n in G.nodes() if n.startswith("wb_")]
-    sorted_whites = sorted(white_balls, key=lambda n: lengths.get(n, float('inf')))
+    # Extract reachable white balls directly in the order Dijkstra discovered them
+    sorted_whites = [node for node in lengths if str(node).startswith("wb_")]
+    
+    # Append any unreachable white balls at the end, just in case
+    unreachable_whites = [n for n in G.nodes() if n.startswith("wb_") and n not in lengths]
+    sorted_whites.extend(unreachable_whites)
     
     path_nodes = sorted_whites
     

@@ -15,16 +15,10 @@ from config import OBJECT_MODEL_PATH, CONFIDENCE_THRESHOLD, CLASS_NAMES
 class Node_object:
     def __init__(self, class_name, center:tuple[float,float], size:tuple[float,float], dist_from_robot:float=0.0, confidence:float=0.0, class_id:int=-1, position_cm:tuple[float,float]=None):
         self.class_name = class_name
-        self.center = center
+        self.center = center # coordinates in px
         self.size = size
-        self.dist_from_robot = dist_from_robot
         self.confidence = confidence
         self.class_id = class_id
-        self.position_cm = position_cm
-    
-    def set_dist_from_robot(self, dist_from_robot:float):
-        self.dist_from_robot = dist_from_robot
-        
 
 def load_object_model(path=OBJECT_MODEL_PATH):
     """Load object ONNX model"""

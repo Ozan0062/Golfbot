@@ -20,7 +20,7 @@ from golfbot_logger import setup_logging, get_logger
 from vision.camera      import open_stream
 from vision.field       import load_field_model, warp_field, detect_field
 from vision.detector    import load_object_model, detect_objects, draw_debug_overlay
-from vision.tracker     import get_true_robot_pose, filter_detections_near_robot, build_world_dict
+from vision.tracker     import WorldState, get_true_robot_pose, filter_detections_near_robot, build_world_state
 from vision.aruco       import create_detector
 from vision.lens_calibration import load_calibration, build_undistort_maps, undistort_frame
 
@@ -88,7 +88,7 @@ def main():
             detections = filter_detections_near_robot(detections, robot_center)
 
             # 5 + 6. Build the world and run one state-machine tick.
-            world   = build_world_dict(detections, robot_center, robot_angle, w, h)
+            world:WorldState   = build_world_state(detections, robot_center, robot_angle, w, h)
             command = controller.update(world)
 
             # 7. Draw the overlay and show it.

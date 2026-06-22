@@ -50,6 +50,7 @@ from config import (
     MARKER_TO_CLAW_CM,
 )
 from golfbot_logger import get_logger
+from vision.tracker import WorldState
 
 
 # On the final drive-in, stop the marker about one arm-length short of the ball so
@@ -113,8 +114,9 @@ class GolfBotController:
 
     # -- Main entry point (called once per camera frame) ----------------------
 
-    def update(self, world: dict) -> Command:
+    def update(self, world:WorldState) -> Command:
         """Run one tick of the state machine and return the command issued."""
+        # updates robot position
         pose = self._pose.update(world)
         if pose is None:
             if self._pose_ok:
@@ -165,7 +167,7 @@ class GolfBotController:
 
     def _cross_blocks_path(self, pose, target, world) -> bool:
         """If the cross blocks the straight path, queue a dodge waypoint and enter AVOID."""
-        cross_px = world.get("cross_px")
+        cross_px = world.cross_px
         if cross_px is None:
             return False
 
@@ -338,7 +340,7 @@ class GolfBotController:
             return Command.BACKWARD
 
         self._has_reversed = False
-        found = any(world.get(key) for key in scan_for)
+        found = any(getattr(world, key) for key in scan_for)
         log.debug("Rescan after reverse: %s", "found a ball" if found else "still empty")
         self._transition(next_if_found if found else next_if_empty)
         return Command.STOP

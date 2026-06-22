@@ -35,13 +35,13 @@ class RouteManager:
     # Public API
     # -------------------------------------------------------------------------
 
-    def get_target(self, robot_pos: tuple, robot_px: tuple, world: dict) -> Optional[RouteTarget]:
+    def get_target(self, robot_pos: tuple, robot_px: tuple, world) -> Optional[RouteTarget]:
         """
         Return the nearest RouteTarget, re-evaluated fresh each call.
         """
         white_balls, white_balls_px = _gather_white(world)
-        orange_cm  = world.get("ob")
-        orange_px  = world.get("ob_px")
+        orange_cm  = world.ob
+        orange_px  = world.ob_px
 
         # ── Phase 1: white balls — always pick the nearest one ───────────
         if white_balls:
@@ -49,17 +49,21 @@ class RouteManager:
                 range(len(white_balls)),
                 key=lambda i: _dist(robot_px, white_balls_px[i]) if robot_px and white_balls_px else float("inf"),
             )
-            target_cm = white_balls[idx]
-            target_px = white_balls_px[idx] if white_balls_px else None
+            target_cm_tuple = white_balls[idx]
+            target_px_tuple = white_balls_px[idx] if white_balls_px else None
+            target_cm = (target_cm_tuple[0], target_cm_tuple[1])
+            target_px = (target_px_tuple[0], target_px_tuple[1]) if target_px_tuple else None
             dist_px   = _dist(robot_px, target_px) if robot_px and target_px else 0.0
             log.debug("Nearest white ball: idx=%d  dist=%.0f px", idx, dist_px)
             return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
         # ── Phase 2: orange ball (all whites collected) ──────────────────
         if orange_cm is not None and orange_px is not None:
-            dist_px = _dist(robot_px, orange_px) if robot_px else 0.0
+            target_cm = (orange_cm[0], orange_cm[1])
+            target_px = (orange_px[0], orange_px[1])
+            dist_px = _dist(robot_px, target_px) if robot_px else 0.0
             log.info("All white balls collected — going for the orange ball")
-            return RouteTarget(cm=orange_cm, px=orange_px, dist_px=dist_px)
+            return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
         # Nothing left
         return None
@@ -77,11 +81,11 @@ class RouteManager:
 # Module helpers
 # ---------------------------------------------------------------------------
 
-def _gather_white(world: dict) -> tuple:
-    """Return (white_balls_cm, white_balls_px) from the world dict."""
+def _gather_white(world) -> tuple:
+    """Return (white_balls_cm, white_balls_px) from the world state."""
     return (
-        world.get("white_balls", []),
-        world.get("white_balls_px", []),
+        world.white_balls + world.white_wall_balls + world.white_corner_balls,
+        world.white_balls_px + world.white_wall_balls_px + world.white_corner_balls_px,
     )
 
 

@@ -35,7 +35,7 @@ class RouteManager:
     # Public API
     # -------------------------------------------------------------------------
 
-    def get_target(self, robot_pos: tuple, robot_px: tuple, world) -> Optional[RouteTarget]: # Bruger de originale px koordinater taget fra Yolo?
+    def get_target(self, robot_pos: tuple, robot_px: tuple, world) -> Optional[RouteTarget]: # Bruger de originale px koordinater taget fra 
         """
         Return the nearest RouteTarget, re-evaluated fresh each call.
         """

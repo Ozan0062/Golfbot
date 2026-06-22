@@ -39,6 +39,7 @@ from controller.navigation import (
 )
 from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
+from controller.dijkstras import get_path
 from config import (
     GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
@@ -136,7 +137,8 @@ class GolfBotController:
 
     def _seek(self, pose, world) -> Command:
         """Pick the closest remaining ball and decide how to approach it."""
-        self._locked_target = self._route.get_target(pose.pos, pose.px, world)
+        path = get_path(world)
+        self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
 
         if self._locked_target is None:
             log.info("No balls in view — backing up to rescan")

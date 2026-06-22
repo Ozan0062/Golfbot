@@ -7,7 +7,7 @@ import networkx as nx
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from vision.tracker import WorldState
-from controller.dijkstras import create_nodes_and_edges, calculate_best_route
+from controller.Dijkstras import create_nodes_and_edges, calculate_best_route
 
 def draw_state(ax, world):
     """Tegner det nuværende state og returnerer den beregnede rute."""

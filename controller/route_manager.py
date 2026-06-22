@@ -69,10 +69,6 @@ class RouteManager:
         return None
     
     def get_target_dijkstras(self, path: list[dict], robot_px: tuple, world) -> Optional[RouteTarget]:
-        """
-        Returnerer den nærmeste RouteTarget direkte fra NetworkX/Dijkstra pathen.
-        Den første ting i pathen er altid det bedste valg uanset type.
-        """
         if not path:
             return None
             

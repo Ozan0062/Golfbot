@@ -6,10 +6,10 @@ from controller.motion import angle_to_rotations, px_to_rotations
 from controller.navigation import angle_to_target, cm_to_pixels, px_to_cm, classify_zone, wall_approach_angle, staging_point
 from vision.tracker import WorldState
 
-WALL_BALL_PENALTY = 5      # Added weight/cost for balls near walls
-CORNER_BALL_PENALTY = 10    # Added weight/cost for balls in corners
+WALL_BALL_PENALTY = 0      # Added weight/cost for balls near walls
+CORNER_BALL_PENALTY = 0    # Added weight/cost for balls in corners
 CROSS_BLOCK_PENALTY = 6   # Extra penalty for balls behind the cross (from the robot's perspective)
-CROSS_CLEARANCE_CM = 15    # Distance from the cross
+CROSS_CLEARANCE_CM = 0    # Distance from the cross
 
 def angle_rotations(robot_pos_cm,target_pos_cm):
     angle = angle_to_target(robot_pos_cm, target_pos_cm)

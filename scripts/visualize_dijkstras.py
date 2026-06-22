@@ -199,6 +199,9 @@ def main():
             ax.set_title("Simulering færdig - Mål nået!")
             fig.canvas.draw()
             break
+        elif target.get("type") == "staging":
+            print(f"  → Staging point nået: {target['id']}")
+            # Vi sletter ikke bolden, da vi kun er på et staging point
         elif target["id"] == "ob":
             world.ob = None
             world.ob_px = None

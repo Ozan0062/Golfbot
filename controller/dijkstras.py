@@ -59,14 +59,23 @@ def _add_staging_nodes(G, ball_id, ball_px, robot_px):
         G.add_node(stg_id, pos=px_to_cm(sp), pos_px=sp,
                    type="staging", penalty=0.0, parent_ball=ball_id)
         
-        if prev_stg_id is None:
-            if robot_px:
-                dist_rot = px_to_rotations(math.dist(robot_px, sp))
+        if robot_px:
+            dist_px = math.dist(robot_px, sp)
+            # Robotten må altid forbinde til det første staging point (indgangen)
+            if prev_stg_id is None:
+                dist_rot = px_to_rotations(dist_px)
                 G.add_edge("robot", stg_id, weight=dist_rot, distance=dist_rot)
-        else:
+            # Hvis robotten allerede står fysisk på et indre staging point, så tillad at den fortsætter derfra
+            elif dist_px < 15.0:
+                dist_rot = px_to_rotations(dist_px)
+                G.add_edge("robot", stg_id, weight=dist_rot, distance=dist_rot)
+
+        if prev_stg_id is not None:
             prev_sp = G.nodes[prev_stg_id]["pos_px"]
             dist_rot = px_to_rotations(math.dist(prev_sp, sp))
             G.add_edge(prev_stg_id, stg_id, weight=dist_rot, distance=dist_rot)
+            # Reverse edge (to allow backing out)
+            G.add_edge(stg_id, prev_stg_id, weight=dist_rot, distance=dist_rot)
             
         prev_stg_id = stg_id
         
@@ -74,6 +83,8 @@ def _add_staging_nodes(G, ball_id, ball_px, robot_px):
     if prev_stg_id is not None:
         dist_rot = px_to_rotations(math.dist(sp, ball_px))
         G.add_edge(prev_stg_id, ball_id, weight=dist_rot, distance=dist_rot)
+        # Reverse edge from ball to staging point
+        G.add_edge(ball_id, prev_stg_id, weight=dist_rot, distance=dist_rot)
 
 def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     G = nx.DiGraph()
@@ -138,12 +149,17 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
             
-            # Prevent outgoing edges from staging nodes
+            # Prevent ALL staging nodes from connecting out to anything else 
+            # (they only connect within their own chain via _add_staging_nodes)
             if data_a["type"] == "staging":
                 continue
             
-            # Prevent direct incoming edges to wall/corner balls (must use staging chain)
+            # Prevent direct incoming edges to wall/corner balls (must enter via staging)
             if data_b["type"] in ("wall", "corner"):
+                continue
+                
+            # Prevent incoming edges to inner staging nodes (only allow entry at index 0)
+            if data_b["type"] == "staging" and not name_b.endswith("_0"):
                 continue
             
             dist_px = math.dist(data_a["pos_px"], data_b["pos_px"])
@@ -176,16 +192,20 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
         
     result = []
     robot_px = G.nodes["robot"]["pos_px"]
+    current_source = "robot"
     
     for target_ball in path_nodes:
         try:
-            p = nx.shortest_path(G, source="robot", target=target_ball, weight="weight")
+            p = nx.shortest_path(G, source=current_source, target=target_ball, weight="weight")
             
-            for step in p[1:]:
-                # Skip target nodes if robot is physically close to avoid infinite loops
-                if math.dist(robot_px, G.nodes[step]["pos_px"]) < 10.0:
-                    continue
-                    
+            start_idx = 1
+            if current_source == "robot":
+                # Find det trin længst fremme i ruten, som robotten allerede er fysisk på
+                for idx, step in enumerate(p):
+                    if math.dist(robot_px, G.nodes[step]["pos_px"]) < 10.0:
+                        start_idx = max(start_idx, idx + 1)
+                        
+            for step in p[start_idx:]:
                 step_data = G.nodes[step]
                 result.append({
                     "id": step,
@@ -195,6 +215,8 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
                     "parent_ball": target_ball if step_data["type"] == "staging" else None
                 })
                 
+            current_source = target_ball
+            
         except nx.NetworkXNoPath:
             node_data = G.nodes[target_ball]
             result.append({

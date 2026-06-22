@@ -45,21 +45,44 @@ def line_intersects_obstacle(robot_coords, ball_coords, cross_coords, clearance=
     
     return math.dist((ox, oy), (proj_x, proj_y)) < clearance
 
-def _add_staging_nodes(G, ball_id, ball_px):
+def _add_staging_nodes(G, ball_id, ball_px, robot_px):
     """Add staging waypoint nodes for a wall/corner ball."""
     _, walls = classify_zone(ball_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
     angle = wall_approach_angle(walls) if walls else None
+    
     if angle is None:
         return
+    
+    prev_stg_id = None
     for i, dist in enumerate(CORNER_STAGE_DISTANCES_PX):
         sp = staging_point(ball_px, angle, dist)
         sp = (max(FIELD_EDGE_MARGIN_PX, min(sp[0], WARPED_WIDTH - FIELD_EDGE_MARGIN_PX)),
               max(FIELD_EDGE_MARGIN_PX, min(sp[1], WARPED_HEIGHT - FIELD_EDGE_MARGIN_PX)))
+        
         stg_id = f"stg_{ball_id}_{i}"
+        
+        # G.add_node returnerer altid None i NetworkX, så vi gemmer i stedet ID'et
         G.add_node(stg_id, pos=px_to_cm(sp), pos_px=sp,
                    type="staging", penalty=0.0, parent_ball=ball_id)
+        
+        if prev_stg_id is None:
+            # Første staging point - forbind robotten dertil
+            if robot_px:
+                dist_rot = px_to_rotations(math.dist(robot_px, sp))
+                G.add_edge("robot", stg_id, weight=dist_rot, distance=dist_rot)
+        else:
+            # Efterfølgende staging points - forbind forrige til denne
+            prev_sp = G.nodes[prev_stg_id]["pos_px"]
+            dist_rot = px_to_rotations(math.dist(prev_sp, sp))
+            G.add_edge(prev_stg_id, stg_id, weight=dist_rot, distance=dist_rot)
+            
+        prev_stg_id = stg_id
+        
+    # TIL SIDST: Forbind kun det ALLERSIDSTE staging point (tættest på) direkte til bolden.
+    # Hvis vi forbandt dem alle til bolden, ville Dijkstra bare tage en genvej direkte fra det første point!
+    if prev_stg_id is not None:
         dist_rot = px_to_rotations(math.dist(sp, ball_px))
-        G.add_edge(stg_id, ball_id, weight=dist_rot, distance=dist_rot)
+        G.add_edge(prev_stg_id, ball_id, weight=dist_rot, distance=dist_rot)
 
 def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     G = nx.DiGraph()
@@ -94,7 +117,7 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
         bid = f"wb_{ball_idx}"
         G.add_node(bid, pos=pos_cm, pos_px=pos_px, type="wall", penalty=penalty)
-        _add_staging_nodes(G, bid, pos_px)
+        _add_staging_nodes(G, bid, pos_px, world.robot_px)
         ball_idx += 1
         
     # 4. Add corner white balls (+ staging points)
@@ -104,7 +127,7 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
         bid = f"wb_{ball_idx}"
         G.add_node(bid, pos=pos_cm, pos_px=pos_px, type="corner", penalty=penalty)
-        _add_staging_nodes(G, bid, pos_px)
+        _add_staging_nodes(G, bid, pos_px, world.robot_px)
         ball_idx += 1
         
     # 5. Add orange ball

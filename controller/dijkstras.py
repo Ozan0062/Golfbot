@@ -158,7 +158,6 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     for node_id in path_nodes:
         node_data = G.nodes[node_id]
         pos_cm = node_data["pos"]
-        # Get pos_px directly from the node! (The true YOLO pixel)
         pos_px = node_data.get("pos_px", (0, 0))
         
         result.append({

@@ -8,8 +8,8 @@ from vision.tracker import WorldState
 
 WALL_BALL_PENALTY = 5      # Added weight/cost for balls near walls
 CORNER_BALL_PENALTY = 10    # Added weight/cost for balls in corners
-CROSS_BLOCK_PENALTY = 6   # Ekstra straf for bolde bag krydset (fra robottens perspektiv)
-CROSS_CLEARANCE_CM = 15    # Afstand fra kryds
+CROSS_BLOCK_PENALTY = 6   # Extra penalty for balls behind the cross (from the robot's perspective)
+CROSS_CLEARANCE_CM = 15    # Distance from the cross
 
 def angle_rotations(robot_pos_cm,target_pos_cm):
     angle = angle_to_target(robot_pos_cm, target_pos_cm)
@@ -31,13 +31,13 @@ def line_intersects_obstacle(robot_coords, ball_coords, cross_coords, clearance=
         
     t = (ao_x * ab_x + ao_y * ab_y) / ab_len_sq
     
-    # Hvis t <= 0, bevæger robotten sig væk fra krydset (krydset ligger bagved eller til siden)
-    # Dermed er krydset ikke i vejen for den direkte rute!
+    # If t <= 0, the robot is moving away from the cross (the cross is behind or to the side)
+    # Thus, the cross is not in the way of the direct route!
     if t <= 0.0:
         return False
         
-    # Begræns t til 1.0. Hvis t > 1 ligger forhindringen længere væk end selve bolden.
-    # Ved at klippe til 1.0 sikrer vi, at hvis BOLDEN ligger inden for radius, får den stadig straf.
+    # Limit t to 1.0. If t > 1, the obstacle is further away than the ball itself.
+    # By clipping to 1.0, we ensure that if the BALL is within the radius, it still gets penalized.
     t = min(1.0, t)
     
     proj_x = ax + t * ab_x
@@ -48,7 +48,7 @@ def line_intersects_obstacle(robot_coords, ball_coords, cross_coords, clearance=
 def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     G = nx.DiGraph()
     
-    # Helper: Tjekker om bolden er bag krydset set fra robotten
+    # Helper: Checks if the ball is behind the cross seen from the robot
     def get_cross_penalty(target_pos):
         if world.robot and world.cross:
             if line_intersects_obstacle(world.robot, target_pos, world.cross, CROSS_CLEARANCE_CM):
@@ -112,17 +112,17 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
             
-            # Udregn afstanden i pixels
+            # Calculate distance in pixels
             dist_px = math.dist(data_a["pos_px"], data_b["pos_px"])
             
-            # Omdan pixel-afstanden til motoromdrejninger
+            # Convert pixel distance to motor rotations
             dist_rotations = px_to_rotations(dist_px)
             
             penalty = data_b["penalty"]
             
             weight = dist_rotations + penalty
             
-            # Vi gemmer dist_rotations, men også den gamle dist i grafen, just in case
+            # We store dist_rotations, but also keep the old dist in the graph just in case
             G.add_edge(name_a, name_b, weight=weight, distance=dist_rotations)
             
     return G
@@ -136,8 +136,8 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     except nx.NodeNotFound:
         return []
         
-    # Find alle hvide bolde og sorter dem efter Dijkstra-afstanden.
-    # get(n, inf) sikrer at bolde, der potentielt er afskåret, bliver lagt bagerst.
+    # Find all white balls and sort them by Dijkstra distance.
+    # get(n, inf) ensures that potentially unreachable balls are placed last.
     white_balls = [n for n in G.nodes() if n.startswith("wb_")]
     sorted_whites = sorted(white_balls, key=lambda n: lengths.get(n, float('inf')))
     
@@ -156,7 +156,7 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     for node_id in path_nodes:
         node_data = G.nodes[node_id]
         pos_cm = node_data["pos"]
-        # Hent pos_px direkte fra noden! (Den ægte YOLO-pixel)
+        # Get pos_px directly from the node! (The true YOLO pixel)
         pos_px = node_data.get("pos_px", (0, 0))
         
         result.append({

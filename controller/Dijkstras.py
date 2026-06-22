@@ -1,15 +1,15 @@
 import math
 import networkx as nx
 
-from config import GOAL_POSITION_PX
-from controller.motion import angle_to_rotations
-from controller.navigation import angle_to_target
+from config import GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
+from controller.motion import angle_to_rotations, px_to_rotations
+from controller.navigation import angle_to_target, cm_to_pixels
 from vision.tracker import WorldState
 
-WALL_BALL_PENALTY = 50.0       # Added weight/cost for balls near walls
-CORNER_BALL_PENALTY = 100.0    # Added weight/cost for balls in corners
-CROSS_BLOCK_PENALTY = 60.0     # Ekstra straf for bolde bag krydset (fra robottens perspektiv)
-CROSS_CLEARANCE_CM = 15.0      # Distance from cross
+WALL_BALL_PENALTY = 5      # Added weight/cost for balls near walls
+CORNER_BALL_PENALTY = 10    # Added weight/cost for balls in corners
+CROSS_BLOCK_PENALTY = 6   # Ekstra straf for bolde bag krydset (fra robottens perspektiv)
+CROSS_CLEARANCE_CM = 15    # Afstand fra kryds
 
 def angle_rotations(robot_pos_cm,target_pos_cm):
     angle = angle_to_target(robot_pos_cm, target_pos_cm)
@@ -55,45 +55,52 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
                 return CROSS_BLOCK_PENALTY
         return 0.0
     
+    from config import GOAL_POSITION_PX
+    
     # 1. Add Robot node
-    if world.robot:
-        G.add_node("robot", pos=world.robot, type="robot", penalty=0.0)
+    if world.robot and world.robot_px:
+        G.add_node("robot", pos=world.robot, pos_px=world.robot_px, type="robot", penalty=0.0)
     
     ball_idx = 0
     
     # 2. Add open field white balls
-    for ball in world.white_balls:
-        pos_cm = (ball[0], ball[1])
+    for ball_cm, ball_px in zip(world.white_balls, world.white_balls_px):
+        pos_cm = (ball_cm[0], ball_cm[1])
+        pos_px = (ball_px[0], ball_px[1])
         penalty = get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, type="open", penalty=penalty)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=penalty)
         ball_idx += 1
         
     # 3. Add wall white balls
-    for ball in world.white_wall_balls:
-        pos_cm = (ball[0], ball[1])
+    for ball_cm, ball_px in zip(world.white_wall_balls, world.white_wall_balls_px):
+        pos_cm = (ball_cm[0], ball_cm[1])
+        pos_px = (ball_px[0], ball_px[1])
         penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, type="wall", penalty=penalty)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="wall", penalty=penalty)
         ball_idx += 1
         
     # 4. Add corner white balls
-    for ball in world.white_corner_balls:
-        pos_cm = (ball[0], ball[1])
+    for ball_cm, ball_px in zip(world.white_corner_balls, world.white_corner_balls_px):
+        pos_cm = (ball_cm[0], ball_cm[1])
+        pos_px = (ball_px[0], ball_px[1])
         penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, type="corner", penalty=penalty)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="corner", penalty=penalty)
         ball_idx += 1
         
     # 5. Add orange ball
-    if world.ob:
+    if world.ob and world.ob_px:
         pos_cm = (world.ob[0], world.ob[1])
+        pos_px = (world.ob_px[0], world.ob_px[1])
         zone = world.ob[2] if len(world.ob) > 2 else "open"
         penalty = get_cross_penalty(pos_cm)
         if zone == "wall":
             penalty += WALL_BALL_PENALTY
         elif zone == "corner":
             penalty += CORNER_BALL_PENALTY
-        G.add_node("ob", pos=pos_cm, type=zone, penalty=penalty)
+        G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=penalty)
         
-    G.add_node("goal", pos=GOAL_POSITION_PX, type="goal", penalty=0.0)
+    G.add_node("goal", pos=GOAL_POSITION_CM, pos_px=GOAL_POSITION_PX, type="goal", penalty=0.0)
+    
     # 6. Create edges between all nodes
     nodes = list(G.nodes(data=True))
     
@@ -105,13 +112,18 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
             
-            # Distance from A to B
-            dist = math.dist(data_a["pos"], data_b["pos"])
+            # Udregn afstanden i pixels
+            dist_px = math.dist(data_a["pos_px"], data_b["pos_px"])
             
-            # Weight = Distance + Target Node's Penalty
-            weight = dist + data_b["penalty"]
+            # Omdan pixel-afstanden til motoromdrejninger
+            dist_rotations = px_to_rotations(dist_px)
             
-            G.add_edge(name_a, name_b, weight=weight, distance=dist)
+            penalty = data_b["penalty"]
+            
+            weight = dist_rotations + penalty
+            
+            # Vi gemmer dist_rotations, men også den gamle dist i grafen, just in case
+            G.add_edge(name_a, name_b, weight=weight, distance=dist_rotations)
             
     return G
 
@@ -119,8 +131,6 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     if not G.has_node("robot"):
         return []
         
-    # Brug NetworkX's indbyggede Dijkstra til at finde den samlede vej-omkostning
-    # fra robotten til alle andre tilgængelige noder i grafen på én gang.
     try:
         lengths = nx.single_source_dijkstra_path_length(G, source="robot", weight="weight")
     except nx.NodeNotFound:
@@ -145,9 +155,14 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     result = []
     for node_id in path_nodes:
         node_data = G.nodes[node_id]
+        pos_cm = node_data["pos"]
+        # Hent pos_px direkte fra noden! (Den ægte YOLO-pixel)
+        pos_px = node_data.get("pos_px", (0, 0))
+        
         result.append({
             "id": node_id,
-            "pos": node_data["pos"],
+            "pos_cm": pos_cm,
+            "pos_px": pos_px,
             "type": node_data["type"]
         })
         

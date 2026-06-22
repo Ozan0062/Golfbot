@@ -60,6 +60,13 @@ def draw_state(ax, world):
         ax.scatter(world.cross[0], world.cross[1], c="purple", s=200, zorder=5, label="obstacle", edgecolors="black")
         ax.text(world.cross[0], world.cross[1] - 4, "cross", fontsize=9, ha="center")
 
+    # Tegn robottens retning/vinkel
+    if world.robot and world.robot_angle is not None:
+        rx, ry = world.robot
+        dx = 12 * math.cos(math.radians(world.robot_angle))
+        dy = 12 * math.sin(math.radians(world.robot_angle))
+        ax.arrow(rx, ry, dx, dy, head_width=3, head_length=4, fc='black', ec='black', zorder=6, width=0.5)
+
     # 4. Tegn pilene i fortløbende rækkefølge
     prev_pos = pos.get("robot", None)
     pos_px_dict = nx.get_node_attributes(G, 'pos_px')
@@ -174,10 +181,17 @@ def main():
         
         # Simuler at robotten kører hen til bolden
         target = best_route[0]
-        world.robot = target.get("pos", target.get("pos_cm")) # Flyt robot
-        world.robot_px = target.get("pos_px")
         pos_cm = target.get("pos", target.get("pos_cm"))
         pos_px = target.get("pos_px")
+        
+        # Opdater robottens vinkel før vi flytter dens position
+        if world.robot and pos_cm:
+            dx = pos_cm[0] - world.robot[0]
+            dy = pos_cm[1] - world.robot[1]
+            world.robot_angle = math.degrees(math.atan2(dy, dx))
+            
+        world.robot = pos_cm # Flyt robot
+        world.robot_px = pos_px
         
         # Saml bolden op (fjern den fra arrays)
         if target["id"] == "goal":

@@ -90,13 +90,13 @@ def main():
 
             # 5 + 6. Build the world and run one state-machine tick.
             world:WorldState   = build_world_state(detections, robot_center, robot_angle, w, h)
-            path = createPath(world)
+            
             command = controller.update(world)
 
             # 7. Draw the overlay and show it.
             view  = controller.debug_view()
             debug = draw_debug_overlay(
-                warped, detections, robot_center, robot_angle,
+                warped, detections, world, robot_center, robot_angle,
                 view["state"], command.name,
                 locked_target=view["target"],
                 avoid_target=view["avoid_target"],

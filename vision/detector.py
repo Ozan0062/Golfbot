@@ -10,7 +10,8 @@ import cv2
 from ultralytics import YOLO
 import sys
 sys.path.append(".")
-from config import OBJECT_MODEL_PATH, CONFIDENCE_THRESHOLD, CLASS_NAMES
+from config import OBJECT_MODEL_PATH, CONFIDENCE_THRESHOLD, CLASS_NAMES, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT
+from controller.navigation import classify_zone
 
 class Node_object:
     def __init__(self, class_name, center:tuple[float,float], size:tuple[float,float], dist_from_robot:float=0.0, confidence:float=0.0, class_id:int=-1, position_cm:tuple[float,float]=None):
@@ -64,12 +65,35 @@ def draw_detections(frame, detections):
             "wb": (255, 255, 255),
         }.get(det.class_name, (128, 128, 128))
 
+        # We only draw boxes for the raw detections.
+        # The coloured circles for zone classifications are drawn later by draw_world_objects
         cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
         label = f"{det.class_name} {det.confidence:.0%}"
         cv2.putText(display, label, (x1, y1 - 6),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 
     return display
+
+def draw_world_objects(img, world):
+    """Draw solid circles to visualize the WorldState lists."""
+    for ball in world.white_balls_px:
+        cv2.circle(img, (int(ball[0]), int(ball[1])), 8, (255, 255, 255), -1)
+        _label(img, "open", (int(ball[0]) - 15, int(ball[1]) - 15), (255, 255, 255), scale=0.45)
+
+    for ball in world.white_wall_balls_px:
+        cv2.circle(img, (int(ball[0]), int(ball[1])), 8, (255, 0, 0), -1)
+        _label(img, "wall", (int(ball[0]) - 15, int(ball[1]) - 15), (255, 0, 0), scale=0.45)
+
+    for ball in world.white_corner_balls_px:
+        cv2.circle(img, (int(ball[0]), int(ball[1])), 8, (0, 0, 255), -1)
+        _label(img, "corner", (int(ball[0]) - 20, int(ball[1]) - 15), (0, 0, 255), scale=0.45)
+        
+    if world.ob_px:
+        cv2.circle(img, (int(world.ob_px[0]), int(world.ob_px[1])), 8, (0, 165, 255), -1)
+        
+    if world.cross_px:
+        cv2.circle(img, (int(world.cross_px[0]), int(world.cross_px[1])), 8, (0, 0, 255), -1)
+
 
 
 # Colours are BGR (OpenCV order).
@@ -172,7 +196,7 @@ def _draw_legend(img):
         _label(img, text, (34, y + 5), _C_TEXT, scale=0.45, thickness=1)
 
 
-def draw_debug_overlay(warped, detections, robot_center, robot_angle,
+def draw_debug_overlay(warped, detections, world, robot_center, robot_angle,
                        state_name, command_name, locked_target=None,
                        avoid_target=None, next_waypoints=None):
     """
@@ -188,6 +212,7 @@ def draw_debug_overlay(warped, detections, robot_center, robot_angle,
     from vision.aruco import draw_robot
 
     debug = draw_detections(warped, detections)
+    draw_world_objects(debug, world)
     debug = draw_robot(debug, robot_center, robot_angle)
 
     target_px = locked_target.px if locked_target is not None else None

@@ -204,20 +204,40 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     if G.has_node("goal"):
         path_nodes.append("goal")
         
-    # Format output with positions and types
+    # Format output with positions and types by asking NetworkX for the actual path!
     result = []
-    for node_id in path_nodes:
-        node_data = G.nodes[node_id]
-        pos_cm = node_data["pos"]
-        pos_px = node_data.get("pos_px", (0, 0))
-        
-        result.append({
-            "id": node_id,
-            "pos_cm": pos_cm,
-            "pos_px": pos_px,
-            "type": node_data["type"]
-        })
-        
+    robot_px = G.nodes["robot"]["pos_px"]
+    
+    for target_ball in path_nodes:
+        try:
+            # Spørg grafen om den præcise rute fra robotten til bolden
+            p = nx.shortest_path(G, source="robot", target=target_ball, weight="weight")
+            
+            # Tilføj alle trin i ruten (undtagen robotten selv)
+            for step in p[1:]:
+                # For at undgå uendelige løkker springer vi trin over, vi allerede er meget tæt på
+                if math.dist(robot_px, G.nodes[step]["pos_px"]) < 10.0:
+                    continue
+                    
+                step_data = G.nodes[step]
+                result.append({
+                    "id": step,
+                    "pos_cm": step_data["pos"],
+                    "pos_px": step_data.get("pos_px", (0, 0)),
+                    "type": step_data["type"],
+                    "parent_ball": target_ball if step_data["type"] == "staging" else None
+                })
+                
+        except nx.NetworkXNoPath:
+            # Fallback hvis stien ikke findes
+            node_data = G.nodes[target_ball]
+            result.append({
+                "id": target_ball,
+                "pos_cm": node_data["pos"],
+                "pos_px": node_data.get("pos_px", (0, 0)),
+                "type": node_data["type"]
+            })
+            
     return result
 
 def get_path(world: WorldState):

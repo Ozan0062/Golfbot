@@ -1,9 +1,9 @@
 import math
 import networkx as nx
 
-from config import GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
+from config import GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM, CORNER_STAGE_DISTANCES_PX, WALL_MARGIN_PX, FIELD_EDGE_MARGIN_PX
 from controller.motion import angle_to_rotations, px_to_rotations
-from controller.navigation import angle_to_target, cm_to_pixels
+from controller.navigation import angle_to_target, cm_to_pixels, px_to_cm, classify_zone, wall_approach_angle, staging_point
 from vision.tracker import WorldState
 
 WALL_BALL_PENALTY = 5      # Added weight/cost for balls near walls
@@ -45,6 +45,22 @@ def line_intersects_obstacle(robot_coords, ball_coords, cross_coords, clearance=
     
     return math.dist((ox, oy), (proj_x, proj_y)) < clearance
 
+def _add_staging_nodes(G, ball_id, ball_px):
+    """Add staging waypoint nodes for a wall/corner ball."""
+    _, walls = classify_zone(ball_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
+    angle = wall_approach_angle(walls) if walls else None
+    if angle is None:
+        return
+    for i, dist in enumerate(CORNER_STAGE_DISTANCES_PX):
+        sp = staging_point(ball_px, angle, dist)
+        sp = (max(FIELD_EDGE_MARGIN_PX, min(sp[0], WARPED_WIDTH - FIELD_EDGE_MARGIN_PX)),
+              max(FIELD_EDGE_MARGIN_PX, min(sp[1], WARPED_HEIGHT - FIELD_EDGE_MARGIN_PX)))
+        stg_id = f"stg_{ball_id}_{i}"
+        G.add_node(stg_id, pos=px_to_cm(sp), pos_px=sp,
+                   type="staging", penalty=0.0, parent_ball=ball_id)
+        dist_rot = px_to_rotations(math.dist(sp, ball_px))
+        G.add_edge(stg_id, ball_id, weight=dist_rot, distance=dist_rot)
+
 def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     G = nx.DiGraph()
     
@@ -71,20 +87,24 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=penalty)
         ball_idx += 1
         
-    # 3. Add wall white balls
+    # 3. Add wall white balls (+ staging points)
     for ball_cm, ball_px in zip(world.white_wall_balls, world.white_wall_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
         penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="wall", penalty=penalty)
+        bid = f"wb_{ball_idx}"
+        G.add_node(bid, pos=pos_cm, pos_px=pos_px, type="wall", penalty=penalty)
+        _add_staging_nodes(G, bid, pos_px)
         ball_idx += 1
         
-    # 4. Add corner white balls
+    # 4. Add corner white balls (+ staging points)
     for ball_cm, ball_px in zip(world.white_corner_balls, world.white_corner_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
         penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="corner", penalty=penalty)
+        bid = f"wb_{ball_idx}"
+        G.add_node(bid, pos=pos_cm, pos_px=pos_px, type="corner", penalty=penalty)
+        _add_staging_nodes(G, bid, pos_px)
         ball_idx += 1
         
     # 5. Add orange ball
@@ -111,6 +131,14 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
                 
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
+            
+            # Staging nodes: others can reach them, but they don't connect out (edge to ball already exists)
+            if data_a["type"] == "staging":
+                continue
+            
+            # Wall/corner balls: they connect out, but others can't reach them directly (only via staging)
+            if data_b["type"] in ("wall", "corner"):
+                continue
             
             # Calculate distance in pixels
             dist_px = math.dist(data_a["pos_px"], data_b["pos_px"])
@@ -173,4 +201,3 @@ def get_path(world: WorldState):
     graph = create_nodes_and_edges(world)
     path  =  calculate_best_route(graph)
     return path
- 

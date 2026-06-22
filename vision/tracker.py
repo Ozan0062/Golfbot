@@ -24,6 +24,7 @@ import sys
 from typing import Optional
 sys.path.append(".")
 
+from Dijkstras import get_path
 import cv2
 import numpy as np
 from dataclasses import dataclass, field
@@ -220,6 +221,7 @@ class WorldState:
     robot: Optional[tuple[float, float]] = None
     robot_px: Optional[tuple[float, float]] = None
     robot_angle: Optional[float] = None
+    path:Optional[list[dict]] = None
 
 def build_world_state(detections, robot_center, robot_angle, image_w, image_h) -> WorldState:
     """
@@ -230,6 +232,7 @@ def build_world_state(detections, robot_center, robot_angle, image_w, image_h) -
     world.robot       = robot_px_to_cm(robot_center, image_w, image_h)
     world.robot_px    = robot_center
     world.robot_angle = robot_angle
+    world.path = get_path(world)
     return world
 
 

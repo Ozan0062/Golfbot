@@ -140,3 +140,9 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
         })
         
     return result
+
+def get_path(world: WorldState):
+    graph = create_nodes_and_edges(world)
+    path  =  calculate_best_route(graph)
+    return path
+ 

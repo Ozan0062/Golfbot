@@ -67,7 +67,38 @@ class RouteManager:
 
         # Nothing left
         return None
-
+    
+    def get_target_dijkstras(self, path: list[dict], robot_px: tuple, world) -> Optional[RouteTarget]:
+        """
+        Returnerer den nærmeste RouteTarget direkte fra NetworkX/Dijkstra pathen.
+        Den første ting i pathen er altid det bedste valg uanset type.
+        """
+        if not path:
+            return None
+            
+        target_cm = path[0]["pos"]
+        
+        # Saml alle fysiske bolde for at finde det tilsvarende pixel-koordinat
+        white_cm, white_px = _gather_white(world)
+        all_cm = list(white_cm)
+        all_px = list(white_px)
+        
+        if world.ob is not None and world.ob_px is not None:
+            all_cm.append(world.ob)
+            all_px.append(world.ob_px)
+            
+        target_px = None
+        for i, ball_cm in enumerate(all_cm):
+            # Find bolden via x og y match for at få dens pixels
+            if math.isclose(ball_cm[0], target_cm[0], abs_tol=0.1) and math.isclose(ball_cm[1], target_cm[1], abs_tol=0.1):
+                if i < len(all_px):
+                    target_px = (all_px[i][0], all_px[i][1])
+                break
+                
+        dist_px = _dist(robot_px, target_px) if robot_px and target_px else 0.0
+        
+        return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
+    
     def advance(self):
         """No-op: nearest-ball selection needs no route list to advance."""
         pass

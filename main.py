@@ -13,7 +13,7 @@ Each camera frame, in order:
 
 import time
 
-from Dijkstras import createPath
+from Dijkstras import createPath, get_path
 import cv2
 
 from golfbot_logger import setup_logging, get_logger
@@ -90,7 +90,6 @@ def main():
 
             # 5 + 6. Build the world and run one state-machine tick.
             world:WorldState   = build_world_state(detections, robot_center, robot_angle, w, h)
-            
             command = controller.update(world)
 
             # 7. Draw the overlay and show it.

@@ -13,8 +13,8 @@ sys.path.insert(0, ".")
 # --- Fix stale pyc for calibration_tracker ---
 import controller.calibration_tracker as _ct
 if not hasattr(_ct, 'calibration_angle_left'):
-    _ct.calibration_angle_left = _ct.CalibrationTracker(_ct.DEGREES_PER_ROTATION)
-    _ct.calibration_angle_right = _ct.CalibrationTracker(_ct.DEGREES_PER_ROTATION)
+    _ct.calibration_angle_left = _ct.CalibrationTracker(_ct.DEGREES_PER_ROTATION_LEFT)
+    _ct.calibration_angle_right = _ct.CalibrationTracker(_ct.DEGREES_PER_ROTATION_RIGHT)
 
 # --- Constants ---
 FW, FH = 900, 600

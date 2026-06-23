@@ -127,6 +127,50 @@ def wall_approach_angle(walls):
     return None
 
 
+# --- Cross approach geometry ----------------------------------------------
+
+# Required robot heading (deg) for a ball at the centre cross, keyed by which
+# quadrant of the cross the ball sits in: (ball_right_of_centre, ball_below_centre).
+# Same convention as angle_to_target (0=right, 90=down, -90=up, 180=left). The
+# heading always points from the ball back toward the cross centre, quantised to
+# the nearest 45deg diagonal, so the robot drives in from the open side and the
+# cross body stays behind the ball.
+_CROSS_APPROACH_ANGLE = {
+    (True,  True):  -135.0,   # ball down-right of cross -> approach up-left
+    (True,  False):  135.0,   # ball up-right   of cross -> approach down-left
+    (False, True):   -45.0,   # ball down-left  of cross -> approach up-right
+    (False, False):   45.0,   # ball up-left    of cross -> approach down-right
+}
+
+
+def cross_approach_angle(ball_px, cross_px):
+    """
+    Fixed-diagonal heading (deg) for collecting a ball at the centre cross.
+
+    Picks one of four 45deg diagonals by the quadrant the ball occupies relative
+    to the cross centre, so the robot approaches like a corner ball: in along the
+    diagonal toward the cross, grab, then back off.
+    """
+    right = ball_px[0] >= cross_px[0]
+    down  = ball_px[1] >= cross_px[1]
+    return _CROSS_APPROACH_ANGLE[(right, down)]
+
+
+def cross_trigger_radius(cross_size_px, fallback_radius_px, clearance_px):
+    """
+    Distance from the cross centre within which a ball is treated as a cross ball.
+
+    Sized to the cross itself (half of the larger detected bounding-box side) plus
+    the robot clearance. Falls back to fallback_radius_px when no live size is
+    available (e.g. the cross size was not detected this frame).
+    """
+    if cross_size_px:
+        half = max(cross_size_px) / 2.0
+    else:
+        half = fallback_radius_px
+    return half + clearance_px
+
+
 def staging_point(target_px, approach_angle_deg, standoff_px):
     angle_rad = math.radians(approach_angle_deg)
     return (

@@ -21,16 +21,19 @@ X increases rightward, Y increases downward.
 
 import math
 import sys
+from typing import Optional
 sys.path.append(".")
 
 import cv2
 import numpy as np
-
+from dataclasses import dataclass, field
 from config import (FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-                    CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM)
+                    CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, ROBOT_MARKER_HEIGHT_CM,
+                    WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
+from controller.navigation import classify_zone
 from vision.aruco import detect_robot
-
-
+        
+# calculates pixels to cm and saves it in variable "position_cm" in each object detection
 def pixels_to_cm(detections, image_width, image_height,
                  field_w=FIELD_WIDTH_CM, field_h=FIELD_HEIGHT_CM):
     """
@@ -40,11 +43,12 @@ def pixels_to_cm(detections, image_width, image_height,
     scale_x = field_w / image_width
     scale_y = field_h / image_height
 
+    import copy
     results = []
     for det in detections:
-        cx, cy = det["center"]
-        det_copy = dict(det)
-        det_copy["position_cm"] = (cx * scale_x, cy * scale_y)
+        cx, cy = det.center
+        det_copy = copy.copy(det)
+        det_copy.position_cm = (cx * scale_x, cy * scale_y)
         results.append(det_copy)
 
     return results
@@ -190,67 +194,87 @@ def filter_detections_near_robot(detections, robot_center_px, radius=None):
     if robot_center_px is None:
         return detections
     rx, ry = robot_center_px
-    return [
-        d for d in detections
-        if d["class_name"] not in ("wb", "ob")
-        or math.dist(d["center"], (rx, ry)) > radius
-    ]
+    filtered = []
+    for d in detections:
+        dist = math.dist(d.center, (rx, ry))
+        d.set_dist_from_robot(dist)
+        if d.class_name not in ("wb", "ob") or dist > radius:
+            filtered.append(d)
+    return filtered
 
 
-def build_world_dict(detections, robot_center, robot_angle, image_w, image_h):
+@dataclass
+class WorldState:
+    corners: list[tuple[float, float]] = field(default_factory=list)
+    walls: list[tuple[float, float]] = field(default_factory=list)
+    white_balls: list[tuple[float, float, str]] = field(default_factory=list)
+    white_balls_px: list[tuple[float, float, str]] = field(default_factory=list)
+    white_corner_balls: list[tuple[float, float, str]] = field(default_factory=list)
+    white_corner_balls_px: list[tuple[float, float, str]] = field(default_factory=list)
+    white_wall_balls: list[tuple[float, float, str]] = field(default_factory=list)
+    white_wall_balls_px: list[tuple[float, float, str]] = field(default_factory=list)
+    ob: Optional[tuple[float, float, str]] = None
+    ob_px: Optional[tuple[float, float, str]] = None
+    cross: Optional[tuple[float, float]] = None
+    cross_px: Optional[tuple[float, float]] = None
+    robot: Optional[tuple[float, float]] = None
+    robot_px: Optional[tuple[float, float]] = None
+    robot_angle: Optional[float] = None
+    path:Optional[list[dict]] = None
+
+def build_world_state(detections, robot_center, robot_angle, image_w, image_h) -> WorldState:
     """
-    Combine YOLO detections and ArUco pose into a single world dict.
+    Combine YOLO detections and ArUco pose into a single world state.
     Contains both cm (for angle/bearing maths) and px (for drive distances).
     """
-    world                = extract_objects(pixels_to_cm(detections, image_w, image_h))
-    world["robot"]       = robot_px_to_cm(robot_center, image_w, image_h)
-    world["robot_px"]    = robot_center
-    world["robot_angle"] = robot_angle
+    from controller.dijkstras import get_path
+    
+    world             = extract_objects(pixels_to_cm(detections, image_w, image_h))
+    world.robot       = robot_px_to_cm(robot_center, image_w, image_h)
+    world.robot_px    = robot_center
+    world.robot_angle = robot_angle
+    world.path = get_path(world)
     return world
 
 
-def extract_objects(detections_cm):
+def extract_objects(detections_cm) -> WorldState:
     """
     Split YOLO detections into named objects.
     Robot is NOT included here — it comes from ArUco separately.
-    Returns dict with both cm and pixel positions:
-        "cross":        (x_cm, y_cm) or None
-        "cross_px":     (x_px, y_px) or None
-        "cross_size_px": (w_px, h_px) or None
-        "ob":           (x_cm, y_cm) or None
-        "ob_px":        (x_px, y_px) or None
-        "white_balls":  [(x_cm, y_cm), ...]
-        "white_balls_px": [(x_px, y_px), ...]
+    Returns WorldState with both cm and pixel positions.
 
     For the single-object classes (orange ball, cross) the most confident
     detection wins.
     """
-    objects = {
-        "cross":          None,
-        "cross_px":       None,
-        "cross_size_px":  None,
-        "ob":             None,
-        "ob_px":          None,
-        "white_balls":    [],
-        "white_balls_px": [],
-    }
+    objects = WorldState()
     best_ob_conf    = 0.0   # confidence of the orange ball kept so far
     best_cross_conf = 0.0   # confidence of the cross kept so far
 
     for det in detections_cm:
-        name   = det["class_name"]
-        pos_cm = det["position_cm"]
-        pos_px = det["center"]          # original pixel coords from YOLO
+        name   = det.class_name
+        pos_cm = det.position_cm
+        pos_px = det.center          # original pixel coords from YOLO
 
         if name == "wb":
-            objects["white_balls"].append(pos_cm)
-            objects["white_balls_px"].append(pos_px)
-        elif name == "ob" and (objects["ob"] is None or det["confidence"] > best_ob_conf):
-            objects["ob"], objects["ob_px"] = pos_cm, pos_px
-            best_ob_conf = det["confidence"]
-        elif name == "cross" and (objects["cross"] is None or det["confidence"] > best_cross_conf):
-            objects["cross"], objects["cross_px"] = pos_cm, pos_px
-            objects["cross_size_px"] = det.get("size")
-            best_cross_conf = det["confidence"]
+            zone, _ = classify_zone(pos_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
+            ball_cm = (pos_cm[0], pos_cm[1], zone)
+            ball_px = (pos_px[0], pos_px[1], zone)
+            if zone == "corner":
+                objects.white_corner_balls.append(ball_cm)
+                objects.white_corner_balls_px.append(ball_px)
+            elif zone == "wall":
+                objects.white_wall_balls.append(ball_cm)
+                objects.white_wall_balls_px.append(ball_px)
+            else:
+                objects.white_balls.append(ball_cm)
+                objects.white_balls_px.append(ball_px)
+        elif name == "ob" and (objects.ob is None or det.confidence > best_ob_conf):
+            zone, _ = classify_zone(pos_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
+            objects.ob = (pos_cm[0], pos_cm[1], zone)
+            objects.ob_px = (pos_px[0], pos_px[1], zone)
+            best_ob_conf = det.confidence
+        elif name == "cross" and (objects.cross is None or det.confidence > best_cross_conf):
+            objects.cross, objects.cross_px = pos_cm, pos_px
+            best_cross_conf = det.confidence
 
     return objects

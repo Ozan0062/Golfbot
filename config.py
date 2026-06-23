@@ -48,8 +48,8 @@ CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm). Information
                              # the claw's floor position is derived geometrically from the
                              # marker, so no separate parallax step is applied to it.
 
-COLLECT_RADIUS_CM = 1.0      # claw-tip -> ball distance (cm) at which we grab.
-COLLECT_RADIUS_PX = 5        # legacy pixel radius (kept for tooling/tests; the live
+COLLECT_RADIUS_CM = 5.0      # claw-tip -> ball distance (cm) at which we grab.
+COLLECT_RADIUS_PX = 8        # legacy pixel radius (kept for tooling/tests; the live
                              # collect check is COLLECT_RADIUS_CM, measured in cm).
 COLLECT_ANGLE_DEG = 5.0      # max angular offset (deg) in x AND y, measured from the
                              # marker using the arm length as reference, before grabbing.
@@ -62,8 +62,9 @@ GOAL_HEADING_TOL_DEG = 5.0    # tolerance either side of GOAL_HEADING_DEG
 REVERSE_ROTATIONS = 1.0      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
 
-CROSS_CLEARANCE_PX     = 70                      # stay at least this far from the cross
+CROSS_CLEARANCE_PX     = 100                      # stay at least this far from the cross
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
+CROSS_RADIUS_PX        = 50                       # default cross radius when vision doesn't provide a size
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
 # --- Cross pickup (ball sitting in/at the centre cross) ----------------------
@@ -74,16 +75,14 @@ CROSS_DIAMETER_CM       = 20.0   # physical size of the centre cross
 # Use the larger per-axis px/cm scale so the radius is generous (never too small).
 CROSS_RADIUS_PX         = CROSS_DIAMETER_CM / 2 * max(
     WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
-CROSS_BALL_CLEARANCE_PX = 60     # robot clearance added beyond the cross radius,
-                                 # for both the pickup trigger and the standoff
 
-WALL_MARGIN_PX      = 120    # a ball this close to a wall needs a staged approach
-STAGING_DISTANCE_PX = 170    # standoff for the final straight-in approach.
+WALL_MARGIN_PX      = 75    # a ball this close to a wall needs a staged approach
+STAGING_DISTANCE_PX = 150    # standoff for the final straight-in approach.
                              # Must be >= WALL_MARGIN_PX / cos(45deg) ~= 170 so corner
                              # staging points land outside the margin on both axes.
 
-# Two staging points per wall/corner ball: 2x then 1x the staging distance.
-CORNER_STAGE_DISTANCES_PX = (STAGING_DISTANCE_PX * 2, STAGING_DISTANCE_PX)
+# One staging point per wall/corner ball: 1x the staging distance.
+CORNER_STAGE_DISTANCES_PX = (STAGING_DISTANCE_PX,)
 FIELD_EDGE_MARGIN_PX = 30    # keep staging waypoints this far inside the field edges
 GOAL_APPROACH_ANGLE_DEG = 180.0   # goal is on the left wall -> approach heading left
 
@@ -105,9 +104,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 62.40   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 27.89   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 30.37   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 60.33   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 29.40   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 29.16   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

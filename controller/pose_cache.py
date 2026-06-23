@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from golfbot_logger import get_logger
+from vision.tracker import WorldState
 
 log = get_logger(__name__)
 
@@ -45,9 +46,9 @@ class PoseCache:
         self._last_seen   = 0.0
         self._valid_after = time.time() + SETTLE_S
 
-    def update(self, world: dict) -> Optional[Pose]:
+    def update(self, world: WorldState) -> Optional[Pose]:
         """
-        Feed a new world dict.  Returns the best available Pose, or None if
+        Feed a new worldState.  Returns the best available Pose, or None if
         the marker hasn't been seen recently enough to trust.
         """
         now = time.time()
@@ -59,13 +60,14 @@ class PoseCache:
         # First frame after settle window expires
         if self._pose is None and self._valid_after > 0:
             log.debug("Settle complete — waiting for ArUco")
-
-        if world.get("robot") is not None and world.get("robot_angle") is not None:
+            
+        # Sets robot position in statemachine object/GolfbotController
+        if world.robot is not None and world.robot_angle is not None: 
             was_empty = self._pose is None
             self._pose      = Pose(
-                pos=world["robot"],
-                px=world.get("robot_px"),
-                angle=world["robot_angle"],
+                pos=world.robot,
+                px=world.robot_px,
+                angle=world.robot_angle,
             )
             self._last_seen = now
             if was_empty:

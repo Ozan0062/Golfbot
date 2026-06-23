@@ -89,6 +89,7 @@ class BallMemory:
             else:
                 self._balls.append({"kind": kind, "px": px, "fresh": True})
                 log.debug("New ball added — %s at (%.0f, %.0f)", kind, px[0], px[1])
+                print(f"Ball found ({kind}): px=({px[0]:.0f},{px[1]:.0f})")
 
     @property
     def balls(self):
@@ -197,10 +198,10 @@ def main():
 
             seen = []
             for det in detections:
-                name = det["class_name"]
+                name = det.class_name
                 if name in ("wb", "ob"):
                     corrected = correct_robot_height(
-                        det["center"], CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, BALL_HEIGHT_CM,
+                        det.center, CAMERA_CENTER_PX, CAMERA_HEIGHT_CM, BALL_HEIGHT_CM,
                         w, h, FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
                     )
                     seen.append((name, corrected))
@@ -247,6 +248,7 @@ def main():
                               (bx + 10, by))
                     put_label(vis,
                               f"Ball {i+1} ({kind}){stale}: "
+                              f"({ball_px[0]:.0f},{ball_px[1]:.0f})  "
                               f"claw→ball={dist_px:.0f}px  off={deg_off:+.1f}°",
                               (8, 44 + i * 22))
 

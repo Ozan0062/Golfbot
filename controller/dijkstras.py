@@ -92,11 +92,6 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         pos_cm = (world.ob[0], world.ob[1])
         pos_px = (world.ob_px[0], world.ob_px[1])
         zone = world.ob[2] if len(world.ob) > 2 else "open"
-        # penalty = get_cross_penalty(pos_cm)
-        if zone == "wall":
-            penalty += WALL_BALL_PENALTY
-        elif zone == "corner":
-            penalty += CORNER_BALL_PENALTY
         G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=0)
         
     G.add_node("goal", pos=GOAL_POSITION_CM, pos_px=GOAL_POSITION_PX, type="goal", penalty=0.0)

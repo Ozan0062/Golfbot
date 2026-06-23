@@ -211,14 +211,14 @@ def path_is_clear(start_px, end_px, obstacles, clearance_px):
 
 
 def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
-                      field_width, field_height):
+                      field_width, field_height, prefer_near_px=None):
     """
     Compute a waypoint to steer around a blocking obstacle.
 
-    The waypoint is placed alongside the obstacle (same progress along the
-    path) but offset perpendicular to the path on the opposite side from
-    the obstacle. If the opposite side is too close to a wall, it flips
-    to the same side but further out.
+    Places the waypoint perpendicular to the robot→target line at the obstacle's
+    projection.  Both candidates (left and right of the path) are evaluated;
+    the one closest to `prefer_near_px` (defaults to robot_px) is preferred.
+    Falls back to the other side if the preferred candidate is outside the field.
 
     Returns (x, y) waypoint in pixel coordinates, or None if the path
     has zero length.
@@ -230,33 +230,92 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
         return None
 
     ux, uy = dx / length, dy / length
-    nx, ny = -uy, ux
+    nx, ny = -uy, ux   # perpendicular unit vector (left of path)
 
     t = (obstacle_px[0] - robot_px[0]) * ux + (obstacle_px[1] - robot_px[1]) * uy
     proj = (robot_px[0] + t * ux, robot_px[1] + t * uy)
 
-    side = (obstacle_px[0] - proj[0]) * nx + (obstacle_px[1] - proj[1]) * ny
+    wp_left  = (proj[0] + nx * clearance_px, proj[1] + ny * clearance_px)
+    wp_right = (proj[0] - nx * clearance_px, proj[1] - ny * clearance_px)
 
-    if side >= 0:
-        wp = (proj[0] - nx * clearance_px, proj[1] - ny * clearance_px)
+    def in_bounds(wp):
+        return (clearance_px <= wp[0] <= field_width  - clearance_px and
+                clearance_px <= wp[1] <= field_height - clearance_px)
+
+    def clamp(wp):
+        return (max(clearance_px, min(wp[0], field_width  - clearance_px)),
+                max(clearance_px, min(wp[1], field_height - clearance_px)))
+
+    ref = prefer_near_px if prefer_near_px is not None else robot_px
+    d_left  = math.hypot(wp_left[0]  - ref[0], wp_left[1]  - ref[1])
+    d_right = math.hypot(wp_right[0] - ref[0], wp_right[1] - ref[1])
+
+    if d_left <= d_right:
+        preferred, fallback = wp_left, wp_right
     else:
-        wp = (proj[0] + nx * clearance_px, proj[1] + ny * clearance_px)
+        preferred, fallback = wp_right, wp_left
 
-    if (wp[0] < clearance_px or wp[0] > field_width - clearance_px or
-            wp[1] < clearance_px or wp[1] > field_height - clearance_px):
-        if side >= 0:
-            wp = (proj[0] + nx * clearance_px, proj[1] + ny * clearance_px)
-        else:
-            wp = (proj[0] - nx * clearance_px, proj[1] - ny * clearance_px)
-
-    wp = (
-        max(clearance_px, min(wp[0], field_width - clearance_px)),
-        max(clearance_px, min(wp[1], field_height - clearance_px)),
-    )
-
-    return wp
+    wp = preferred if in_bounds(preferred) else fallback
+    return clamp(wp)
 
 
 # --- Cross-obstacle geometry -------------------------------------------------
+
+def cross_avoid_points(cross_px, field_width, field_height):
+    """
+    Four fixed navigation waypoints around the cross: one in each cardinal
+    direction, placed at the midpoint between the cross centre and the wall.
+    Keyed by heading angle (0=right, 90=down, 180=left, 270=up).
+    """
+    cx, cy = cross_px
+    return {
+          0: ((cx + field_width)  / 2, cy),          # right
+         90: (cx, (cy + field_height) / 2),           # down
+        180: (cx / 2,             cy),                # left
+        270: (cx, cy / 2),                            # up
+    }
+
+def cross_bypass_waypoint(robot_px, target_px, cross_px, clearance_px,
+                          field_width, field_height):
+    """
+    Compute a single waypoint that routes around a cross-shaped obstacle.
+
+    Instead of offsetting perpendicular to the path (which lands on a cross arm),
+    this places the waypoint at one of the four 45-degree diagonal positions from
+    the cross centre — between the arms.  The quadrant that minimises the total
+    detour (robot → waypoint → target) is chosen.
+
+    clearance_px should be larger than the cross arm half-length so the waypoint
+    clears both arms.
+    """
+    cx, cy = cross_px
+    d = clearance_px
+
+    quadrants = [
+        (cx - d, cy - d),  # upper-left
+        (cx + d, cy - d),  # upper-right
+        (cx - d, cy + d),  # lower-left
+        (cx + d, cy + d),  # lower-right
+    ]
+
+    margin = d
+    def in_bounds(wp):
+        return (margin <= wp[0] <= field_width  - margin and
+                margin <= wp[1] <= field_height - margin)
+
+    def clamp(wp):
+        return (max(margin, min(wp[0], field_width  - margin)),
+                max(margin, min(wp[1], field_height - margin)))
+
+    # Pick the quadrant that minimises total path length robot→wp→target.
+    def cost(q):
+        return (math.hypot(q[0] - robot_px[0],  q[1] - robot_px[1]) +
+                math.hypot(q[0] - target_px[0], q[1] - target_px[1]))
+
+    candidates = sorted(quadrants, key=cost)
+    for wp in candidates:
+        if in_bounds(wp):
+            return clamp(wp)
+    return clamp(candidates[0])
 
 

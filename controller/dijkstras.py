@@ -140,9 +140,6 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     if G.has_node("ob"):
         path_nodes.append("ob")
         
-    # Always add the goal as the absolute final destination
-    if G.has_node("goal"):
-        path_nodes.append("goal")
         
     # Format output with positions and types
     result = []

@@ -128,15 +128,6 @@ def wall_approach_angle(walls):
 
 
 def staging_point(target_px, approach_angle_deg, standoff_px):
-    """
-    Position the robot should reach before the final straight-line approach.
-
-    Placed standoff_px pixels away from the target, directly behind the
-    approach angle. From here the robot just drives straight to collect.
-
-    Example: ball near top wall, approach angle = -90 deg (heading up).
-      staging = (ball_x, ball_y + standoff) -- robot waits below the ball.
-    """
     angle_rad = math.radians(approach_angle_deg)
     return (
         target_px[0] - standoff_px * math.cos(angle_rad),

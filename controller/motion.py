@@ -18,11 +18,20 @@ import math
 
 import controller.ev3_controller as robot
 from controller.commands import Command
-from controller.navigation import angle_to_target, angle_error, staging_point, px_to_cm
+from controller.navigation import (
+    angle_to_target, angle_error, staging_point, px_to_cm,
+    classify_zone, wall_approach_angle, cross_approach_angle,
+    cross_trigger_radius, path_is_clear, obstacle_waypoint,
+)
 from controller.calibration_tracker import (
     calibration_pixels, calibration_angle_left, calibration_angle_right,
 )
-from config import ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX
+from config import (
+    ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX,
+    WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT, CORNER_STAGE_DISTANCES_PX,
+    FIELD_EDGE_MARGIN_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX,
+    CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX,
+)
 from golfbot_logger import get_logger
 
 log = get_logger(__name__)

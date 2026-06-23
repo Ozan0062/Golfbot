@@ -24,7 +24,7 @@ ROBOT_MARKER_HEIGHT_CM = 19.8    # ArUco marker height above the field
 # The point on the field the camera hangs directly above, in warped pixels.
 # Scaled from (312, 303) in the old 640x480 view to 900x600.
 # Re-measure in the 900x600 warped image if you need more precision.
-CAMERA_CENTER_PX = (439, 358)
+CAMERA_CENTER_PX = (439, 340)
 
 # --- Navigation safety -------------------------------------------------------
 # Keep the robot centre at least this far from the field edges while collecting.
@@ -66,6 +66,17 @@ CROSS_CLEARANCE_PX     = 70                      # stay at least this far from t
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
+# --- Cross pickup (ball sitting in/at the centre cross) ----------------------
+# A ball this close to the cross is collected like a corner ball: staged
+# approach along a fixed diagonal, then back off after grabbing.
+CROSS_DIAMETER_CM       = 20.0   # physical size of the centre cross
+# Fallback cross radius in warped px when the live detection size is unavailable.
+# Use the larger per-axis px/cm scale so the radius is generous (never too small).
+CROSS_RADIUS_PX         = CROSS_DIAMETER_CM / 2 * max(
+    WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
+CROSS_BALL_CLEARANCE_PX = 60     # robot clearance added beyond the cross radius,
+                                 # for both the pickup trigger and the standoff
+
 WALL_MARGIN_PX      = 120    # a ball this close to a wall needs a staged approach
 STAGING_DISTANCE_PX = 170    # standoff for the final straight-in approach.
                              # Must be >= WALL_MARGIN_PX / cos(45deg) ~= 170 so corner
@@ -90,8 +101,13 @@ CLASS_NAMES = {
 }
 
 # --- Drive/turn calibration initial estimates (tune to your robot) -----------
-PIXELS_PER_ROTATION  = 47.0   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION = 25.0   # degrees turned per motor rotation
+# These are starting values only — the live system refines them each run and,
+# on ESC from main.py, writes the learned values back here (see
+# controller/calibration_tracker.save_calibration_to_config). Turn calibration
+# is tracked separately per direction because the robot can turn asymmetrically.
+PIXELS_PER_ROTATION        = 62.40   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 27.89   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 30.37   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

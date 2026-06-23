@@ -84,15 +84,15 @@ while True:
             conn.sendall(b"OK")
 
         elif cmd == "RELEASE":
-            gate.rotate(-4, speed=100)    # open
+            gate.rotate(0.5, speed=100)    # open
             time.sleep(1)
-            gate.rotate(-4, speed=100)   # close
+            gate.rotate(0.5, speed=100)   # close
             conn.sendall(b"OK")
 
         elif cmd == "GATE_OPEN":
-            gate.rotate(4, speed=100)
+            gate.rotate(-0.5, speed=100)
             conn.sendall(b"OK")
 
         elif cmd == "GATE_CLOSE":
-            gate.rotate(-4, speed=100)
+            gate.rotate(0.5, speed=100)
             conn.sendall(b"OK")

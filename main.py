@@ -25,6 +25,7 @@ from vision.aruco       import create_detector
 from vision.lens_calibration import load_calibration, build_undistort_maps, undistort_frame
 
 from controller.state_machine import GolfBotController
+from controller.calibration_tracker import save_calibration_to_config
 import controller.ev3_controller as robot
 from config import CAMERA_WIDTH, CAMERA_HEIGHT
 
@@ -57,6 +58,7 @@ def main():
     controller    = GolfBotController()
     last_corners  = None
     last_no_field = 2.0   # when we last warned about missing field corners
+    esc_pressed   = False  # did the user quit with ESC? -> save calibration on the way out
 
     try:
         while True:
@@ -74,6 +76,7 @@ def main():
                     log.warning("Waiting for field corners...")
                     last_no_field = now
                 if _show_and_wait(frame):      # keep the window responsive / allow ESC
+                    esc_pressed = True
                     break
                 continue
 
@@ -102,8 +105,20 @@ def main():
             )
             cv2.imshow("GolfBot", debug)
             if (cv2.waitKey(1) & 0xFF) == 27:   # ESC
+                esc_pressed = True
                 break
     finally:
+        # On ESC, persist the calibration learned this session as the new
+        # starting values in config.py for the next run.
+        if esc_pressed:
+            try:
+                px, deg_l, deg_r = save_calibration_to_config()
+                log.info(
+                    "Saved calibration to config — drive %.2f px/rot, turn L %.2f / R %.2f deg/rot",
+                    px, deg_l, deg_r,
+                )
+            except Exception:
+                log.exception("Failed to save calibration to config")
         stream.stop()
         cv2.destroyAllWindows()
         log.info("GolfBot stopped.")

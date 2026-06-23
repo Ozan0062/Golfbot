@@ -64,6 +64,8 @@ MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check o
 
 CROSS_CLEARANCE_PX     = 70                      # stay at least this far from the cross
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
+CROSS_RADIUS_PX        = 50                       # default cross radius when vision doesn't provide a size
+CROSS_BALL_CLEARANCE_PX = 30                      # extra margin around the cross for ball-proximity check
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
 WALL_MARGIN_PX      = 120    # a ball this close to a wall needs a staged approach

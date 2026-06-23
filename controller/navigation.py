@@ -233,3 +233,40 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
     )
 
     return wp
+
+
+# --- Cross-obstacle geometry -------------------------------------------------
+
+def cross_approach_angle(target_px, cross_px):
+    """
+    Required robot heading (degrees) when collecting a ball near the cross.
+
+    The cross has four open quadrants between its arms.  We pick the 45 deg
+    diagonal that points from the cross centre *toward* the ball so the robot
+    drives in through the gap between two arms.
+
+    Returns one of -135, -45, 45, 135.
+    """
+    dx = target_px[0] - cross_px[0]
+    dy = target_px[1] - cross_px[1]
+    raw = math.degrees(math.atan2(dy, dx))
+
+    # Snap to the nearest 90-degree diagonal.
+    if raw >= 0:
+        return 45.0 if raw < 90 else 135.0
+    else:
+        return -45.0 if raw > -90 else -135.0
+
+
+def cross_trigger_radius(cross_size_px, default_radius_px, clearance_px):
+    """
+    Effective radius around the cross within which a ball is considered
+    'at the cross' and needs a staged diagonal approach.
+
+    If the vision system provides a bounding-box size for the cross
+    (cross_size_px), the radius is half that size plus a clearance margin.
+    Otherwise, fall back to default_radius_px + clearance_px.
+    """
+    if cross_size_px is not None and cross_size_px > 0:
+        return cross_size_px / 2.0 + clearance_px
+    return default_radius_px + clearance_px

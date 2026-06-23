@@ -139,7 +139,7 @@ class GolfBotController:
         """Pick the closest remaining ball and decide how to approach it."""
         path = get_path(world)
         self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
-
+        
         if self._locked_target is None:
             log.info("No balls in view — backing up to rescan")
             self._reset_targeting()

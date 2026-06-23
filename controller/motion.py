@@ -18,11 +18,20 @@ import math
 
 import controller.ev3_controller as robot
 from controller.commands import Command
-from controller.navigation import angle_to_target, angle_error, staging_point, px_to_cm
+from controller.navigation import (
+    angle_to_target, angle_error, staging_point, px_to_cm,
+    classify_zone, wall_approach_angle, cross_approach_angle,
+    cross_trigger_radius, path_is_clear, obstacle_waypoint,
+)
 from controller.calibration_tracker import (
     calibration_pixels, calibration_angle_left, calibration_angle_right,
 )
-from config import ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX
+from config import (
+    ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX,
+    WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT, CORNER_STAGE_DISTANCES_PX,
+    FIELD_EDGE_MARGIN_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX,
+    CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX,
+)
 from golfbot_logger import get_logger
 
 log = get_logger(__name__)
@@ -66,6 +75,82 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
         )
         waypoints.append(sp)
     return waypoints
+
+
+# --- Route-cost simulation (TSP edge weight) ---------------------------------
+
+def _approach_waypoints(start_px, target_px):
+    """
+    Final-approach waypoints for one ball, mirroring the wall/corner staging the
+    state machine plans in _begin_staged_approach.
+
+      open field    -> drive straight in              -> [target]
+      wall / corner -> staged approach, then the ball -> [stage_far, stage_near, target]
+    """
+    zone, walls = classify_zone(target_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
+    if zone in ("wall", "corner"):
+        angle = wall_approach_angle(walls)
+        if angle is not None:
+            stages = corner_approach_waypoints(
+                start_px, target_px, angle, CORNER_STAGE_DISTANCES_PX,
+                WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
+            )
+            return stages + [target_px]
+    return [target_px]
+
+
+def plan_route_waypoints(start_px, target_px, cross_px=None, cross_size_px=None):
+    if cross_px is not None:
+        # 1. Ball at the cross: approach like a corner, in along a fixed diagonal.
+        radius = cross_trigger_radius(cross_size_px, CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX)
+        if distance_px(target_px, cross_px) <= radius:
+            angle = cross_approach_angle(target_px, cross_px)
+            stages = corner_approach_waypoints(
+                start_px, target_px, angle, CORNER_STAGE_DISTANCES_PX,
+                WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
+            )
+            return stages + [target_px]
+
+        # 2. Cross blocks the straight path: steer around it, then approach.
+        clear, _ = path_is_clear(start_px, target_px, [cross_px], CROSS_CLEARANCE_PX)
+        if not clear:
+            wp = obstacle_waypoint(start_px, target_px, cross_px,
+                                   AVOID_WAYPOINT_DIST_PX, WARPED_WIDTH, WARPED_HEIGHT)
+            if wp is not None:
+                # FSM re-plans from the dodge waypoint; the cross is now out of the
+                # way, so finish with the normal wall/open approach from there.
+                return [wp] + _approach_waypoints(wp, target_px)
+
+    # 3 & 4. Wall/corner staging or a straight open-field drive.
+    return _approach_waypoints(start_px, target_px)
+
+
+def get_price(start_px, target_px, *, cross_px=None, cross_size_px=None, start_angle_deg=None):
+    if start_px is None or target_px is None:
+        raise ValueError("get_price needs concrete (x, y) pixel coordinates")
+
+    waypoints = plan_route_waypoints(start_px, target_px, cross_px, cross_size_px)
+
+    total_rotations = 0.0
+    prev_px = start_px
+    heading = start_angle_deg
+
+    for wp in waypoints:
+        # Drive this leg.
+        total_rotations += px_to_rotations(distance_px(prev_px, wp))
+
+        # Turn onto this leg. Bearing in cm so the warp doesn't distort it.
+        desired = angle_to_target(px_to_cm(prev_px), px_to_cm(wp))
+        if heading is not None and abs(angle_error(heading, desired)) > ALIGN_THRESHOLD_DEG:
+            total_rotations += angle_to_rotations(angle_error(heading, desired))
+        heading = desired
+        prev_px = wp
+
+    return total_rotations
+
+
+# Alias for the exact name requested.
+getprice = get_price
 
 
 # --- Driver ------------------------------------------------------------------

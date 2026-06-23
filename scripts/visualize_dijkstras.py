@@ -72,13 +72,14 @@ def draw_state(ax, world):
     pos_px_dict = nx.get_node_attributes(G, 'pos_px')
     prev_pos_px = pos_px_dict.get("robot", None)
     
-    from controller.motion import px_to_rotations
     
     if prev_pos and prev_pos_px:
         num_steps = len(best_route)
+        prev_node_id = "robot"
         for i, target in enumerate(best_route):
             target_pos = target.get("pos", target.get("pos_cm"))
             target_pos_px = target.get("pos_px")
+            target_node_id = target["id"]
             
             # Gråskala gradient pil
             shade_value = 0.3 + 0.7 * (i / max(1, num_steps - 1))
@@ -89,13 +90,12 @@ def draw_state(ax, world):
                         xytext=prev_pos, textcoords='data',
                         arrowprops=dict(arrowstyle="->", color=arrow_color, alpha=0.9, lw=3, shrinkA=12, shrinkB=12))
                                         
-            # Udregn og tegn distance på pilen i rotationer
-            dist_px = math.dist(prev_pos_px, target_pos_px)
-            dist_rot = px_to_rotations(dist_px)
+            # Hent den faktiske edge-vægt fra grafen (get_price)
+            edge_weight = G[prev_node_id][target_node_id]["weight"] if G.has_edge(prev_node_id, target_node_id) else 0.0
             
             mid_x = (prev_pos[0] + target_pos[0]) / 2
             mid_y = (prev_pos[1] + target_pos[1]) / 2
-            ax.text(mid_x, mid_y, f"{dist_rot:.1f} rot", color="darkred", fontsize=8, fontweight="bold", 
+            ax.text(mid_x, mid_y, f"{edge_weight:.1f} rot", color="darkred", fontsize=8, fontweight="bold", 
                     ha="center", va="center", bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1))
             
             # Label med step nummer over noden
@@ -105,6 +105,7 @@ def draw_state(ax, world):
                     
             prev_pos = target_pos
             prev_pos_px = target_pos_px
+            prev_node_id = target_node_id
 
     # 5. Afsluttende grafik-indstillinger
     ax.legend(loc="upper right")

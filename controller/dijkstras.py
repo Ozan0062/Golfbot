@@ -1,8 +1,8 @@
 import math
 import networkx as nx
 
-from config import GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
-from controller.motion import angle_to_rotations, px_to_rotations
+from config import CAMERA_CENTER_PX, GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
+from controller.motion import angle_to_rotations, get_price, px_to_rotations
 from controller.navigation import angle_to_target, cm_to_pixels
 from vision.tracker import WorldState
 
@@ -67,24 +67,24 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     for ball_cm, ball_px in zip(world.white_balls, world.white_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
-        penalty = get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=penalty)
+        # penalty = get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=0)
         ball_idx += 1
         
     # 3. Add wall white balls
     for ball_cm, ball_px in zip(world.white_wall_balls, world.white_wall_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
-        penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="wall", penalty=penalty)
+        # penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="wall", penalty=0)
         ball_idx += 1
         
     # 4. Add corner white balls
     for ball_cm, ball_px in zip(world.white_corner_balls, world.white_corner_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
-        penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="corner", penalty=penalty)
+        # penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="corner", penalty=0)
         ball_idx += 1
         
     # 5. Add orange ball
@@ -92,12 +92,12 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         pos_cm = (world.ob[0], world.ob[1])
         pos_px = (world.ob_px[0], world.ob_px[1])
         zone = world.ob[2] if len(world.ob) > 2 else "open"
-        penalty = get_cross_penalty(pos_cm)
+        # penalty = get_cross_penalty(pos_cm)
         if zone == "wall":
             penalty += WALL_BALL_PENALTY
         elif zone == "corner":
             penalty += CORNER_BALL_PENALTY
-        G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=penalty)
+        G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=0)
         
     G.add_node("goal", pos=GOAL_POSITION_CM, pos_px=GOAL_POSITION_PX, type="goal", penalty=0.0)
     
@@ -112,18 +112,9 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
             
-            # Calculate distance in pixels
-            dist_px = math.dist(data_a["pos_px"], data_b["pos_px"])
+            weight = get_price(data_a["pos_px"], data_b["pos_px"], cross_px=CAMERA_CENTER_PX, cross_size_px=70*70, start_angle_deg=world.robot_angle)
             
-            # Convert pixel distance to motor rotations
-            dist_rotations = px_to_rotations(dist_px)
-            
-            penalty = data_b["penalty"]
-            
-            weight = dist_rotations + penalty
-            
-            # We store dist_rotations, but also keep the old dist in the graph just in case
-            G.add_edge(name_a, name_b, weight=weight, distance=dist_rotations)
+            G.add_edge(name_a, name_b, weight=weight)
             
     return G
 

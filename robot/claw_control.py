@@ -40,7 +40,7 @@ class Claw:
         self.close_claw()
         time.sleep(0.5)
         print("Rotating gate")
-        self.gate.rotate(8)
+        self.gate.rotate(1)
         time.sleep(0.5)
         print("Closing claw again")
         self.close_claw()

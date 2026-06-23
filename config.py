@@ -24,7 +24,7 @@ ROBOT_MARKER_HEIGHT_CM = 19.8    # ArUco marker height above the field
 # The point on the field the camera hangs directly above, in warped pixels.
 # Scaled from (312, 303) in the old 640x480 view to 900x600.
 # Re-measure in the 900x600 warped image if you need more precision.
-CAMERA_CENTER_PX = (439, 358)
+CAMERA_CENTER_PX = (439, 340)
 
 # --- Navigation safety -------------------------------------------------------
 # Keep the robot centre at least this far from the field edges while collecting.
@@ -105,9 +105,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 47.0   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 25.0   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 25.0   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 62.40   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 27.89   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 30.37   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

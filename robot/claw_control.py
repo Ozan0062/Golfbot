@@ -27,6 +27,8 @@ class Claw:
         return True
 
     def reset_claw(self, speedDPS=300):
+        self.open_claw(speedDPS=speedDPS)
+        time.sleep(0.5)
         self.motor.on(speed=SpeedDPS(speedDPS))
         self.motor.wait_until('stalled')
         self.motor.stop(stop_action='brake')
@@ -45,9 +47,4 @@ class Claw:
         print("Closing claw again")
         self.close_claw()
         time.sleep(0.5)
-        print("Opening claw")
-        self.open_claw()
-        time.sleep(0.5)
-        print("Resetting claw")
-        self.reset_claw()
         return True

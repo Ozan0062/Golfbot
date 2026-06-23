@@ -49,7 +49,7 @@ from config import (
     MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
-    MARKER_TO_CLAW_CM, CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX,
+    MARKER_TO_CLAW_CM, CROSS_RADIUS_PX,
 )
 from golfbot_logger import get_logger
 from vision.tracker import WorldState
@@ -138,8 +138,11 @@ class GolfBotController:
 
     def _seek(self, pose, world) -> Command:
         """Pick the closest remaining ball and decide how to approach it."""
-        self._locked_target = self._route.get_target_dijkstras(world.path, pose.px, world)
-
+        path = get_path(world)
+        
+        if self._locked_target is None:
+            self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
+        
         if self._locked_target is None:
             log.info("No balls in view — backing up to rescan")
             self._reset_targeting()
@@ -216,8 +219,7 @@ class GolfBotController:
         if cross_px is None:
             return False
 
-        radius = cross_trigger_radius(
-            None, CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX)
+        radius = cross_trigger_radius(CROSS_RADIUS_PX)
         dist = math.hypot(target.px[0] - cross_px[0], target.px[1] - cross_px[1])
         if dist > radius:
             return False
@@ -229,6 +231,23 @@ class GolfBotController:
         log.info("Ball at the cross (%.0f px away, r=%.0f) — approaching like a corner at %.0f deg",
                  dist, radius, angle)
         self._transition(self._stage_along_angle(pose, target, angle, "cross"))
+
+        # The staging point is in the same quadrant as the ball (opposite side of
+        # the cross from the robot).  If the robot must cross the cross body to
+        # reach it, prepend a single dodge waypoint so the robot goes around first.
+        staging_pt = self._avoid_target
+        clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
+        if not clear:
+            dodge = obstacle_waypoint(pose.px, staging_pt, cross_px,
+                                      AVOID_WAYPOINT_DIST_PX, WARPED_WIDTH, WARPED_HEIGHT)
+            if dodge is not None:
+                # Push the staging point back; dodge becomes the first stop.
+                self._corner_waypoints.insert(0, staging_pt)
+                self._avoid_target = dodge
+                log.info("Cross blocks path to staging point — inserting dodge waypoint "
+                         "(%.0f, %.0f) before staging (%.0f, %.0f)",
+                         dodge[0], dodge[1], staging_pt[0], staging_pt[1])
+
         return True
 
     def _stage_along_angle(self, pose, target, approach_angle, label) -> State:
@@ -258,11 +277,13 @@ class GolfBotController:
         """Drive to the current waypoint; on arrival advance the plan."""
         wp = self._avoid_target
         if wp is None:
+            log.warning("AVOID entered with no waypoint — falling back to SEEK")
             self._transition(State.SEEK)
             return Command.STOP
 
         command, arrived = self._driver.drive_toward(pose, wp, AVOID_ARRIVE_PX)
         if arrived:
+            log.info("Waypoint reached at (%.0f, %.0f)", wp[0], wp[1])
             return self._waypoint_reached(pose)
         return command
 
@@ -271,10 +292,8 @@ class GolfBotController:
         # More staging points queued → head to the next one.
         if self._corner_waypoints:
             self._avoid_target = self._corner_waypoints.pop(0)
-            if self._corner_approach_angle is not None:
-                log.debug("Stage reached (heading err %+.1f°) — advancing to (%.0f,%.0f), %d left",
-                          angle_error(pose.angle, self._corner_approach_angle),
-                          self._avoid_target[0], self._avoid_target[1], len(self._corner_waypoints))
+            log.info("Advancing to next waypoint (%.0f, %.0f), %d remaining",
+                     self._avoid_target[0], self._avoid_target[1], len(self._corner_waypoints))
             return Command.STOP
 
         # Staged approach finished → align to the approach heading, then head straight in.
@@ -289,11 +308,12 @@ class GolfBotController:
             log.debug("Staging complete — heading in to the ball")
             self._corner_approach_angle = None
             self._avoid_target = None
+            log.info("Staging complete — transitioning to APPROACH")
             self._transition(State.APPROACH)
             return Command.STOP
 
         # Cross dodge finished → re-plan from the new position.
-        log.debug("Reached dodge waypoint — re-checking the path")
+        log.info("Reached dodge waypoint — re-checking the path")
         self._avoid_target = None
         self._transition(State.SEEK)
         return Command.STOP
@@ -353,6 +373,8 @@ class GolfBotController:
             log.debug("Wall ball — backing off")
             self._driver.reverse(px_to_rotations(STAGING_DISTANCE_PX))
             self._is_wall_ball = False
+            
+        robot.reset_claw()
 
         self._transition(State.SEEK)
         return Command.COLLECT

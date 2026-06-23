@@ -54,7 +54,7 @@ def main():
 
     # Open/close the claw once on startup before the main loop.
     log.info("Startup collect...")
-    robot.collect()
+    robot.reset_claw()
 
     controller    = GolfBotController()
     last_corners  = None

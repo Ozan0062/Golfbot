@@ -1,9 +1,9 @@
 import math
 import networkx as nx
 
-from config import GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM, CORNER_STAGE_DISTANCES_PX, WALL_MARGIN_PX, FIELD_EDGE_MARGIN_PX
-from controller.motion import angle_to_rotations, px_to_rotations
-from controller.navigation import angle_to_target, cm_to_pixels, px_to_cm, classify_zone, wall_approach_angle, staging_point
+from config import CAMERA_CENTER_PX, GOAL_POSITION_CM, WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
+from controller.motion import angle_to_rotations, get_price, px_to_rotations
+from controller.navigation import angle_to_target, cm_to_pixels
 from vision.tracker import WorldState
 
 WALL_BALL_PENALTY = 0
@@ -104,38 +104,29 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     for ball_cm, ball_px in zip(world.white_balls, world.white_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
-        penalty = get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=penalty)
+        # penalty = get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=0)
         ball_idx += 1
         
     for ball_cm, ball_px in zip(world.white_wall_balls, world.white_wall_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
-        penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        bid = f"wb_{ball_idx}"
-        G.add_node(bid, pos=pos_cm, pos_px=pos_px, type="wall", penalty=penalty)
-        _add_staging_nodes(G, bid, pos_px, world.robot_px)
+        # penalty = WALL_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="wall", penalty=0)
         ball_idx += 1
         
     for ball_cm, ball_px in zip(world.white_corner_balls, world.white_corner_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
-        penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
-        bid = f"wb_{ball_idx}"
-        G.add_node(bid, pos=pos_cm, pos_px=pos_px, type="corner", penalty=penalty)
-        _add_staging_nodes(G, bid, pos_px, world.robot_px)
+        # penalty = CORNER_BALL_PENALTY + get_cross_penalty(pos_cm) + angle_rotations(world.robot, pos_cm)
+        G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="corner", penalty=0)
         ball_idx += 1
         
     if world.ob and world.ob_px:
         pos_cm = (world.ob[0], world.ob[1])
         pos_px = (world.ob_px[0], world.ob_px[1])
         zone = world.ob[2] if len(world.ob) > 2 else "open"
-        penalty = get_cross_penalty(pos_cm)
-        if zone == "wall":
-            penalty += WALL_BALL_PENALTY
-        elif zone == "corner":
-            penalty += CORNER_BALL_PENALTY
-        G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=penalty)
+        G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=0)
         
     G.add_node("goal", pos=GOAL_POSITION_CM, pos_px=GOAL_POSITION_PX, type="goal", penalty=0.0)
     
@@ -149,24 +140,9 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
             
-            # Prevent ALL staging nodes from connecting out to anything else 
-            # (they only connect within their own chain via _add_staging_nodes)
-            if data_a["type"] == "staging":
-                continue
+            weight = get_price(data_a["pos_px"], data_b["pos_px"], cross_px=CAMERA_CENTER_PX, cross_size_px=70*70, start_angle_deg=world.robot_angle)
             
-            # Prevent direct incoming edges to wall/corner balls (must enter via staging)
-            if data_b["type"] in ("wall", "corner"):
-                continue
-                
-            # Prevent incoming edges to inner staging nodes (only allow entry at index 0)
-            if data_b["type"] == "staging" and not name_b.endswith("_0"):
-                continue
-            
-            dist_px = math.dist(data_a["pos_px"], data_b["pos_px"])
-            dist_rotations = px_to_rotations(dist_px)
-            weight = dist_rotations + data_b["penalty"]
-            
-            G.add_edge(name_a, name_b, weight=weight, distance=dist_rotations)
+            G.add_edge(name_a, name_b, weight=weight)
             
     return G
 
@@ -187,8 +163,6 @@ def calculate_best_route(G: nx.DiGraph) -> list[dict]:
     path_nodes = sorted_whites
     if G.has_node("ob"):
         path_nodes.append("ob")
-    if G.has_node("goal"):
-        path_nodes.append("goal")
         
     result = []
     robot_px = G.nodes["robot"]["pos_px"]

@@ -32,9 +32,6 @@ while True:
         except (IndexError, ValueError):
             print("  usage: t <degrees>")
     elif parts[0] == "set":
-        gate.motor.command = "reset"
-        time.sleep(0.3)
-        print("  Gate zero set.")
         break
     else:
         print("  Unknown command.")
@@ -47,8 +44,6 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind((HOST, PORT))
 server.listen()
 print("Robot ready, listening on port", PORT)
-
-claw.collect_ball()
 
 while True:
     conn, addr = server.accept()
@@ -95,4 +90,8 @@ while True:
 
         elif cmd == "GATE_CLOSE":
             gate.rotate(0.5, speed=100)
+            conn.sendall(b"OK")
+            
+        elif cmd == "RESET_CLAW":
+            claw.reset_claw()
             conn.sendall(b"OK")

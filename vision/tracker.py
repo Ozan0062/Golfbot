@@ -216,6 +216,7 @@ def extract_objects(detections_cm):
     Returns dict with both cm and pixel positions:
         "cross":        (x_cm, y_cm) or None
         "cross_px":     (x_px, y_px) or None
+        "cross_size_px": (w_px, h_px) or None
         "ob":           (x_cm, y_cm) or None
         "ob_px":        (x_px, y_px) or None
         "white_balls":  [(x_cm, y_cm), ...]
@@ -227,6 +228,7 @@ def extract_objects(detections_cm):
     objects = {
         "cross":          None,
         "cross_px":       None,
+        "cross_size_px":  None,
         "ob":             None,
         "ob_px":          None,
         "white_balls":    [],
@@ -248,6 +250,7 @@ def extract_objects(detections_cm):
             best_ob_conf = det["confidence"]
         elif name == "cross" and (objects["cross"] is None or det["confidence"] > best_cross_conf):
             objects["cross"], objects["cross_px"] = pos_cm, pos_px
+            objects["cross_size_px"] = det.get("size")
             best_cross_conf = det["confidence"]
 
     return objects

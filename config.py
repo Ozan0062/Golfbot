@@ -66,6 +66,17 @@ CROSS_CLEARANCE_PX     = 70                      # stay at least this far from t
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
+# --- Cross pickup (ball sitting in/at the centre cross) ----------------------
+# A ball this close to the cross is collected like a corner ball: staged
+# approach along a fixed diagonal, then back off after grabbing.
+CROSS_DIAMETER_CM       = 20.0   # physical size of the centre cross
+# Fallback cross radius in warped px when the live detection size is unavailable.
+# Use the larger per-axis px/cm scale so the radius is generous (never too small).
+CROSS_RADIUS_PX         = CROSS_DIAMETER_CM / 2 * max(
+    WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
+CROSS_BALL_CLEARANCE_PX = 60     # robot clearance added beyond the cross radius,
+                                 # for both the pickup trigger and the standoff
+
 WALL_MARGIN_PX      = 120    # a ball this close to a wall needs a staged approach
 STAGING_DISTANCE_PX = 170    # standoff for the final straight-in approach.
                              # Must be >= WALL_MARGIN_PX / cos(45deg) ~= 170 so corner

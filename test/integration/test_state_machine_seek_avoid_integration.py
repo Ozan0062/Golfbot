@@ -36,6 +36,47 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
         self.assertIs(command, Command.STOP)
         self.assertIs(controller.state, State.AVOID)
 
+    def test_ball_at_the_cross_is_collected_like_a_corner(self):
+        # A white ball sitting right at the cross should trigger the staged,
+        # back-off "wall ball" approach, NOT the straight-line open-field path.
+        controller = GolfBotController()
+        world = {
+            "robot": (20.0, 20.0),
+            "robot_px": (100, 100),
+            "robot_angle": 0.0,
+            "white_balls": [(85.0, 75.0)],
+            "white_balls_px": [(470, 320)],   # ~28 px from the cross centre
+            "ob": None,
+            "ob_px": None,
+            "cross_px": (450, 300),
+            "cross_size_px": (100, 100),       # radius ~50 + clearance -> ball is inside
+        }
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.AVOID)
+        self.assertTrue(controller._is_wall_ball)            # backs off after grabbing
+        self.assertIsNotNone(controller._corner_approach_angle)
+
+    def test_ball_far_from_cross_does_not_trigger_cross_pickup(self):
+        controller = GolfBotController()
+        world = {
+            "robot": (20.0, 20.0),
+            "robot_px": (100, 100),
+            "robot_angle": 0.0,
+            "white_balls": [(40.0, 40.0)],
+            "white_balls_px": [(200, 200)],    # well clear of the cross
+            "ob": None,
+            "ob_px": None,
+            "cross_px": (450, 300),
+            "cross_size_px": (100, 100),
+        }
+
+        controller.update(world)
+
+        self.assertFalse(controller._is_wall_ball)
+
     def test_state_machine_stops_when_robot_pose_is_missing(self):
         controller = GolfBotController()
         world = {

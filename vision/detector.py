@@ -20,6 +20,10 @@ class Node_object:
         self.size = size
         self.confidence = confidence
         self.class_id = class_id
+        self.dist_from_robot = dist_from_robot
+
+    def set_dist_from_robot(self, dist: float):
+        self.dist_from_robot = dist
 
 def load_object_model(path=OBJECT_MODEL_PATH):
     """Load object ONNX model"""

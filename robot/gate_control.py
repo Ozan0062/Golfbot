@@ -2,7 +2,7 @@ import time
 from ev3dev2.motor import SpeedPercent
 
 # 8 motor rotations = 360 degrees of gate
-DEG_PER_ROTATION = 360.0 / 8.0  # 45 deg/rot
+DEG_PER_ROTATION = 360.0 / 1.0
 
 
 class Gate:
@@ -39,12 +39,11 @@ class Gate:
             time.sleep(0.05)
         return True
 
-    def open(self, rotations=4, speed=100):
+    def open(self, rotations=-0.5, speed=100):
         return self._run(rotations, speed)
 
-    def close(self, rotations=4, speed=100):
+    def close(self, rotations=-0.5, speed=100):
         return self._run(-rotations, speed)
 
     def rotate(self, rotations, speed=50):
-        """Rotate gate by given motor rotations (8 rot = 360 deg of gate)."""
-        return self._run(rotations, speed)
+        return self._run(-rotations, speed)

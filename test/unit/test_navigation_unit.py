@@ -12,6 +12,8 @@ from controller.navigation import (
     angle_to_target,
     classify_zone,
     cm_to_pixels,
+    cross_approach_angle,
+    cross_trigger_radius,
     obstacle_waypoint,
     path_is_clear,
     staging_point,
@@ -94,6 +96,35 @@ class NavigationUnitTests(unittest.TestCase):
 
     def test_obstacle_waypoint_returns_none_for_zero_length_path(self):
         self.assertIsNone(obstacle_waypoint((100, 100), (100, 100), (120, 120), 70, 900, 600))
+
+
+class CrossApproachTests(unittest.TestCase):
+    CROSS = (450, 300)   # cross centre
+
+    def test_cross_approach_angle_picks_diagonal_toward_centre_per_quadrant(self):
+        # Heading always points from the ball back toward the cross centre,
+        # quantised to the nearest 45deg diagonal.
+        self.assertEqual(cross_approach_angle((500, 350), self.CROSS), -135.0)  # down-right -> up-left
+        self.assertEqual(cross_approach_angle((500, 250), self.CROSS),  135.0)  # up-right   -> down-left
+        self.assertEqual(cross_approach_angle((400, 350), self.CROSS),  -45.0)  # down-left  -> up-right
+        self.assertEqual(cross_approach_angle((400, 250), self.CROSS),   45.0)  # up-left    -> down-right
+
+    def test_cross_approach_staging_point_sits_radially_outside_the_ball(self):
+        # The staging point must be further from the cross than the ball, so the
+        # robot drives inward and the cross stays behind the ball.
+        ball = (500, 350)
+        angle = cross_approach_angle(ball, self.CROSS)
+        sp = staging_point(ball, angle, 100)
+        ball_d = math.hypot(ball[0] - self.CROSS[0], ball[1] - self.CROSS[1])
+        sp_d = math.hypot(sp[0] - self.CROSS[0], sp[1] - self.CROSS[1])
+        self.assertGreater(sp_d, ball_d)
+
+    def test_cross_trigger_radius_uses_detected_size_when_available(self):
+        # half of the larger box side + clearance
+        self.assertAlmostEqual(cross_trigger_radius((100, 80), 999, 60), 50 + 60)
+
+    def test_cross_trigger_radius_falls_back_when_size_missing(self):
+        self.assertAlmostEqual(cross_trigger_radius(None, 53, 60), 53 + 60)
 
 
 if __name__ == "__main__":

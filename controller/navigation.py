@@ -127,16 +127,38 @@ def wall_approach_angle(walls):
     return None
 
 
+# --- Cross approach geometry ----------------------------------------------
+
+def cross_approach_angle(ball_px, cross_px):
+    """
+    Fixed-diagonal heading (deg) for collecting a ball at the centre cross.
+
+    Computes the direction from cross centre → ball, adds 180° to get the
+    approach direction (robot drives from the ball's side toward the cross),
+    then snaps to the nearest 45° diagonal.  This is more robust than a strict
+    quadrant comparison: detection noise must shift the angle by >22.5° before
+    a wrong diagonal is chosen.
+    """
+    dx = ball_px[0] - cross_px[0]
+    dy = ball_px[1] - cross_px[1]
+    raw = math.degrees(math.atan2(dy, dx))   # direction cross→ball
+    approach = raw + 180.0                   # robot faces the opposite way
+    snapped  = round(approach / 45.0) * 45.0
+    # Normalise to (-180, 180]
+    while snapped >  180.0: snapped -= 360.0
+    while snapped <= -180.0: snapped += 360.0
+    return snapped
+
+
+def cross_trigger_radius(radius_px):
+    """
+    Distance from the cross centre within which a ball is treated as a cross ball.
+    Returns 2x the cross radius.
+    """
+    return radius_px * 2
+
+
 def staging_point(target_px, approach_angle_deg, standoff_px):
-    """
-    Position the robot should reach before the final straight-line approach.
-
-    Placed standoff_px pixels away from the target, directly behind the
-    approach angle. From here the robot just drives straight to collect.
-
-    Example: ball near top wall, approach angle = -90 deg (heading up).
-      staging = (ball_x, ball_y + standoff) -- robot waits below the ball.
-    """
     angle_rad = math.radians(approach_angle_deg)
     return (
         target_px[0] - standoff_px * math.cos(angle_rad),
@@ -237,36 +259,4 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
 
 # --- Cross-obstacle geometry -------------------------------------------------
 
-def cross_approach_angle(target_px, cross_px):
-    """
-    Required robot heading (degrees) when collecting a ball near the cross.
 
-    The cross has four open quadrants between its arms.  We pick the 45 deg
-    diagonal that points from the cross centre *toward* the ball so the robot
-    drives in through the gap between two arms.
-
-    Returns one of -135, -45, 45, 135.
-    """
-    dx = target_px[0] - cross_px[0]
-    dy = target_px[1] - cross_px[1]
-    raw = math.degrees(math.atan2(dy, dx))
-
-    # Snap to the nearest 90-degree diagonal.
-    if raw >= 0:
-        return 45.0 if raw < 90 else 135.0
-    else:
-        return -45.0 if raw > -90 else -135.0
-
-
-def cross_trigger_radius(cross_size_px, default_radius_px, clearance_px):
-    """
-    Effective radius around the cross within which a ball is considered
-    'at the cross' and needs a staged diagonal approach.
-
-    If the vision system provides a bounding-box size for the cross
-    (cross_size_px), the radius is half that size plus a clearance margin.
-    Otherwise, fall back to default_radius_px + clearance_px.
-    """
-    if cross_size_px is not None and cross_size_px > 0:
-        return cross_size_px / 2.0 + clearance_px
-    return default_radius_px + clearance_px

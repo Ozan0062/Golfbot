@@ -36,6 +36,7 @@ from controller.motion import (
 from controller.navigation import (
     angle_to_target, angle_error, path_is_clear, obstacle_waypoint,
     classify_zone, wall_approach_angle, px_angle_to_cm,
+    cross_approach_angle, cross_trigger_radius,
 )
 from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
@@ -48,7 +49,7 @@ from config import (
     MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
-    MARKER_TO_CLAW_CM,
+    MARKER_TO_CLAW_CM, CROSS_RADIUS_PX,
 )
 from golfbot_logger import get_logger
 from vision.tracker import WorldState
@@ -138,7 +139,9 @@ class GolfBotController:
     def _seek(self, pose, world) -> Command:
         """Pick the closest remaining ball and decide how to approach it."""
         path = get_path(world)
-        self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
+        
+        if self._locked_target is None:
+            self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
         
         if self._locked_target is None:
             log.info("No balls in view — backing up to rescan")
@@ -150,18 +153,24 @@ class GolfBotController:
         target = self._locked_target
         log.info("Target locked — ball at (%.0f, %.0f) px", target.px[0], target.px[1])
 
-        # 1. Cross in the way?  Dodge around it first, then re-plan.
+        # 1. Ball sitting in/at the cross?  Collect it like a corner ball
+        #    (staged diagonal approach).  Must come before the dodge check below,
+        #    otherwise the cross would read as "blocking" its own ball forever.
+        if self._cross_ball_approach(pose, target, world):
+            return Command.STOP
+
+        # 2. Cross in the way of a different ball?  Dodge around it first, re-plan.
         if self._cross_blocks_path(pose, target, world):
             return Command.STOP
 
-        # 2. Ball against a wall or in a corner?  Approach via staging points.
+        # 3. Ball against a wall or in a corner?  Approach via a staging point.
         zone, walls = classify_zone(target.px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
         if zone in ("wall", "corner"):
             self._is_wall_ball = True
             self._transition(self._begin_staged_approach(pose, target, walls, zone))
             return Command.STOP
 
-        # 3. Open field — just go to it.
+        # 4. Open field — go straight to it.
         self._reset_targeting()
         self._is_wall_ball = False
         self._transition(State.APPROACH)
@@ -195,24 +204,69 @@ class GolfBotController:
     def _begin_staged_approach(self, pose, target, walls, zone) -> State:
         """Plan a wall/corner approach.  Returns the next state to enter."""
         angle = wall_approach_angle(walls)
-        if angle is None:                       # no usable constraint — treat as open field
+        if angle is None:
+            log.warning("No usable wall angle for zone=%s — skipping staging", zone)
             return State.APPROACH
+        return self._stage_along_angle(pose, target, angle, zone)
 
+    def _cross_ball_approach(self, pose, target, world) -> bool:
+        """
+        If the locked ball sits within the cross's pickup radius, collect it like
+        a corner ball: staged diagonal approach + back-off.  Returns True if it
+        took over (the caller should then return STOP).
+        """
+        cross_px = world.cross_px
+        if cross_px is None:
+            return False
+
+        radius = cross_trigger_radius(CROSS_RADIUS_PX)
+        dist = math.hypot(target.px[0] - cross_px[0], target.px[1] - cross_px[1])
+        if dist > radius:
+            return False
+
+        angle = cross_approach_angle(target.px, cross_px)
+        # Treat it as a wall ball so we back off after grabbing (don't shove it
+        # into the cross).
+        self._is_wall_ball = True
+        log.info("Ball at the cross (%.0f px away, r=%.0f) — approaching like a corner at %.0f deg",
+                 dist, radius, angle)
+        self._transition(self._stage_along_angle(pose, target, angle, "cross"))
+
+        # The staging point is in the same quadrant as the ball (opposite side of
+        # the cross from the robot).  If the robot must cross the cross body to
+        # reach it, prepend a single dodge waypoint so the robot goes around first.
+        staging_pt = self._avoid_target
+        clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
+        if not clear:
+            dodge = obstacle_waypoint(pose.px, staging_pt, cross_px,
+                                      AVOID_WAYPOINT_DIST_PX, WARPED_WIDTH, WARPED_HEIGHT)
+            if dodge is not None:
+                # Push the staging point back; dodge becomes the first stop.
+                self._corner_waypoints.insert(0, staging_pt)
+                self._avoid_target = dodge
+                log.info("Cross blocks path to staging point — inserting dodge waypoint "
+                         "(%.0f, %.0f) before staging (%.0f, %.0f)",
+                         dodge[0], dodge[1], staging_pt[0], staging_pt[1])
+
+        return True
+
+    def _stage_along_angle(self, pose, target, approach_angle, label) -> State:
+        """
+        Build the staging waypoints for a fixed-heading approach (wall, corner, or
+        cross) and load them into the AVOID plan.  Returns the next state.
+        """
         waypoints = corner_approach_waypoints(
-            pose.px, target.px, angle, CORNER_STAGE_DISTANCES_PX,
+            pose.px, target.px, approach_angle, CORNER_STAGE_DISTANCES_PX,
             WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
         )
-        if not waypoints:                       # already at the staging point — go straight in
-            log.debug("Already at %s staging point (walls=%s) — heading straight in", zone, walls)
-            return State.APPROACH
-
         self._avoid_target          = waypoints[0]
         self._corner_waypoints      = waypoints[1:]
-        # Staging points are placed in pixel space (raw `angle`); the heading we
-        # align to before driving in is the same approach in the cm frame, so the
-        # two agree once pose.angle is physical. Axis-aligned walls are unchanged.
-        self._corner_approach_angle = px_angle_to_cm(angle)
-        log.info("%s ball — approaching via %d staging point(s)", zone.capitalize(), len(waypoints))
+        # Staging points are placed in pixel space (raw `approach_angle`); the
+        # heading we align to before driving in is the same approach in the cm
+        # frame, so the two agree once pose.angle is physical. Axis-aligned
+        # headings are unchanged.
+        self._corner_approach_angle = px_angle_to_cm(approach_angle)
+        log.info("%s ball — approaching via %d staging point(s)", label.capitalize(), len(waypoints))
         log.debug("staging path: %s",
                   "  ->  ".join(f"({w[0]:.0f},{w[1]:.0f})" for w in waypoints))
         return State.AVOID
@@ -223,11 +277,13 @@ class GolfBotController:
         """Drive to the current waypoint; on arrival advance the plan."""
         wp = self._avoid_target
         if wp is None:
+            log.warning("AVOID entered with no waypoint — falling back to SEEK")
             self._transition(State.SEEK)
             return Command.STOP
 
         command, arrived = self._driver.drive_toward(pose, wp, AVOID_ARRIVE_PX)
         if arrived:
+            log.info("Waypoint reached at (%.0f, %.0f)", wp[0], wp[1])
             return self._waypoint_reached(pose)
         return command
 
@@ -236,10 +292,8 @@ class GolfBotController:
         # More staging points queued → head to the next one.
         if self._corner_waypoints:
             self._avoid_target = self._corner_waypoints.pop(0)
-            if self._corner_approach_angle is not None:
-                log.debug("Stage reached (heading err %+.1f°) — advancing to (%.0f,%.0f), %d left",
-                          angle_error(pose.angle, self._corner_approach_angle),
-                          self._avoid_target[0], self._avoid_target[1], len(self._corner_waypoints))
+            log.info("Advancing to next waypoint (%.0f, %.0f), %d remaining",
+                     self._avoid_target[0], self._avoid_target[1], len(self._corner_waypoints))
             return Command.STOP
 
         # Staged approach finished → align to the approach heading, then head straight in.
@@ -254,11 +308,12 @@ class GolfBotController:
             log.debug("Staging complete — heading in to the ball")
             self._corner_approach_angle = None
             self._avoid_target = None
+            log.info("Staging complete — transitioning to APPROACH")
             self._transition(State.APPROACH)
             return Command.STOP
 
         # Cross dodge finished → re-plan from the new position.
-        log.debug("Reached dodge waypoint — re-checking the path")
+        log.info("Reached dodge waypoint — re-checking the path")
         self._avoid_target = None
         self._transition(State.SEEK)
         return Command.STOP
@@ -318,6 +373,8 @@ class GolfBotController:
             log.debug("Wall ball — backing off")
             self._driver.reverse(px_to_rotations(STAGING_DISTANCE_PX))
             self._is_wall_ball = False
+            
+        robot.reset_claw()
 
         self._transition(State.SEEK)
         return Command.COLLECT

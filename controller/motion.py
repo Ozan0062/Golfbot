@@ -30,7 +30,7 @@ from config import (
     ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX,
     WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX,
-    CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX,
+    CROSS_RADIUS_PX,
 )
 from golfbot_logger import get_logger
 
@@ -102,7 +102,7 @@ def _approach_waypoints(start_px, target_px):
 def plan_route_waypoints(start_px, target_px, cross_px=None, cross_size_px=None):
     if cross_px is not None:
         # 1. Ball at the cross: approach like a corner, in along a fixed diagonal.
-        radius = cross_trigger_radius(cross_size_px, CROSS_RADIUS_PX, CROSS_BALL_CLEARANCE_PX)
+        radius = cross_trigger_radius(CROSS_RADIUS_PX)
         if distance_px(target_px, cross_px) <= radius:
             angle = cross_approach_angle(target_px, cross_px)
             stages = corner_approach_waypoints(

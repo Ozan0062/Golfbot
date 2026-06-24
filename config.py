@@ -59,7 +59,7 @@ COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correcti
 GOAL_ARRIVE_PX = 100         # arrive radius (px) for the final goal approach
 GOAL_HEADING_DEG     = 180.0  # required robot heading when entering the goal
 GOAL_HEADING_TOL_DEG = 5.0    # tolerance either side of GOAL_HEADING_DEG
-REVERSE_ROTATIONS = 1.0      # how far to back up when no balls are visible
+REVERSE_ROTATIONS = 0.5      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
 
 CROSS_CLEARANCE_PX     = 100                       # stay at least this far from the cross centre
@@ -104,9 +104,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 65.27   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 27.14   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 29.60   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 64.98   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 31.11   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 29.70   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

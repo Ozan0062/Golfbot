@@ -47,7 +47,7 @@ from config import (
     ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, GOAL_ARRIVE_PX,
     GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
     CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
-    WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
+    WALL_MARGIN_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
     MARKER_TO_CLAW_CM, CROSS_RADIUS_PX,
 )
@@ -489,7 +489,7 @@ class GolfBotController:
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
             log.debug("Wall ball — backing off")
-            self._driver.reverse(px_to_rotations(STAGING_DISTANCE_PX/6))
+            self._driver.reverse(px_to_rotations(REVERSE_ROTATIONS))
             self._is_wall_ball = False
         
         robot.gate_rotate()       

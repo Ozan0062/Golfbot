@@ -143,7 +143,8 @@ def cross_approach_angle(ball_px, cross_px):
     dy = ball_px[1] - cross_px[1]
     raw = math.degrees(math.atan2(dy, dx))   # direction cross→ball
     approach = raw + 180.0                   # robot faces the opposite way
-    snapped  = round(approach / 45.0) * 45.0
+    # Snap only to the diagonals: 45, 135, -45, -135 (gaps between cross legs)
+    snapped = math.floor((approach + 45.0) / 90.0) * 90.0 + 45.0
     # Normalise to (-180, 180]
     while snapped >  180.0: snapped -= 360.0
     while snapped <= -180.0: snapped += 360.0
@@ -235,8 +236,12 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
     t = (obstacle_px[0] - robot_px[0]) * ux + (obstacle_px[1] - robot_px[1]) * uy
     proj = (robot_px[0] + t * ux, robot_px[1] + t * uy)
 
-    wp_left  = (proj[0] + nx * clearance_px, proj[1] + ny * clearance_px)
-    wp_right = (proj[0] - nx * clearance_px, proj[1] - ny * clearance_px)
+    # Pull the waypoint back along the path so the diagonal approach clears the obstacle
+    t_pullback = max(0, t - clearance_px)
+    proj_pullback = (robot_px[0] + t_pullback * ux, robot_px[1] + t_pullback * uy)
+
+    wp_left  = (proj_pullback[0] + nx * clearance_px, proj_pullback[1] + ny * clearance_px)
+    wp_right = (proj_pullback[0] - nx * clearance_px, proj_pullback[1] - ny * clearance_px)
 
     def in_bounds(wp):
         return (clearance_px <= wp[0] <= field_width  - clearance_px and

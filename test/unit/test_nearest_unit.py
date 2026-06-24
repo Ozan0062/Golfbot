@@ -5,25 +5,12 @@ Uses synthetic WorldState objects, so no camera, YOLO model, or robot is needed.
 
 import unittest
 
-from controller.nearest import (
-    find_nearest,
-    create_nodes_and_edges,
-    line_intersects_obstacle,
-)
+from controller.nearest import find_nearest, create_nodes_and_edges
 from test.world_state_helpers import world_state
 
 
 class NearestUnitTests(unittest.TestCase):
-    def test_line_intersects_obstacle_only_when_cross_is_on_forward_segment(self):
-        self.assertTrue(
-            line_intersects_obstacle((0, 0), (10, 0), (5, 1), clearance=2)
-        )
-        self.assertFalse(
-            line_intersects_obstacle((0, 0), (10, 0), (-5, 0), clearance=2)
-        )
-        self.assertFalse(
-            line_intersects_obstacle((0, 0), (10, 0), (5, 5), clearance=2)
-        )
+
 
     def test_create_nodes_and_edges_includes_robot_balls_orange_and_goal(self):
         world = world_state(
@@ -46,7 +33,9 @@ class NearestUnitTests(unittest.TestCase):
         self.assertTrue(graph.has_node("goal"))
         self.assertTrue(graph.has_node("ob"))
         self.assertEqual(len([node for node in graph.nodes if str(node).startswith("wb_")]), 3)
-        self.assertGreater(graph.number_of_edges(), graph.number_of_nodes())
+        # Since the graph now only adds edges from the robot to the targets (skipping goal and itself)
+        # There are 3 white balls + 1 orange ball = 4 edges
+        self.assertEqual(graph.number_of_edges(), 4)
 
     def test_find_nearest_returns_nearest_white_ball(self):
         world = world_state(

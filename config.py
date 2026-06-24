@@ -18,8 +18,8 @@ WARPED_WIDTH  = 900
 WARPED_HEIGHT = 600
 
 # --- Parallax / height correction (cm) ---------------------------------------
-CAMERA_HEIGHT_CM       = 178.0
-ROBOT_MARKER_HEIGHT_CM = 19.8    # ArUco marker height above the field
+CAMERA_HEIGHT_CM       = 176.5
+ROBOT_MARKER_HEIGHT_CM = 20.6    # ArUco marker height above the field
 
 # The point on the field the camera hangs directly above, in warped pixels.
 # Scaled from (312, 303) in the old 640x480 view to 900x600.
@@ -104,9 +104,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 67.39   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 29.44   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 28.27   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 65.27   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 27.14   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 29.60   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

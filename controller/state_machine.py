@@ -316,7 +316,8 @@ class GolfBotController:
         log.debug("staging path: %s",
                   "  ->  ".join(f"({w[0]:.0f},{w[1]:.0f})" for w in waypoints))
 
-        # If the cross blocks the path to the first staging point, prepend a dodge.
+        # If the cross blocks the path to the first staging point, route around it
+        # using the 4 fixed cardinal avoid points (same logic as _cross_blocks_path).
         cross_px = world.cross_px if world is not None else None
         if cross_px is not None:
             staging_pt = self._avoid_target
@@ -325,13 +326,50 @@ class GolfBotController:
                       pose.px[0], pose.px[1], staging_pt[0], staging_pt[1],
                       "clear" if staging_clear else "BLOCKED")
             if not staging_clear:
-                dodge = obstacle_waypoint(pose.px, staging_pt, cross_px,
-                                          AVOID_WAYPOINT_DIST_PX, WARPED_WIDTH, WARPED_HEIGHT)
-                if dodge is not None:
+                avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
+                avoid_pts = list(avoid_map.values())
+
+                def _clr(a, b):
+                    ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
+                    return ok
+
+                def _dst(a, b):
+                    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+                # Try single avoid point: robot → pt → staging.
+                route = None
+                single = [pt for pt in avoid_pts if _clr(pt, staging_pt)]
+                single.sort(key=lambda pt: _dst(pose.px, pt))
+                for pt in single:
+                    if _clr(pose.px, pt):
+                        route = [pt]
+                        log.info("Cross blocks staging — single avoid point (%.0f,%.0f) → staging=(%.0f,%.0f)",
+                                 pt[0], pt[1], staging_pt[0], staging_pt[1])
+                        break
+
+                # Try two avoid points: robot → pt1 → pt2 → staging.
+                if route is None:
+                    pairs = [
+                        (pt1, pt2)
+                        for pt1 in avoid_pts for pt2 in avoid_pts
+                        if pt1 is not pt2
+                        and _clr(pose.px, pt1)
+                        and _clr(pt1, pt2)
+                        and _clr(pt2, staging_pt)
+                    ]
+                    if pairs:
+                        pt1, pt2 = min(pairs, key=lambda p: _dst(pose.px, p[0]) + _dst(p[0], p[1]))
+                        route = [pt1, pt2]
+                        log.info("Cross blocks staging — two avoid points (%.0f,%.0f)→(%.0f,%.0f) → staging=(%.0f,%.0f)",
+                                 pt1[0], pt1[1], pt2[0], pt2[1], staging_pt[0], staging_pt[1])
+
+                if route is not None:
                     self._corner_waypoints.insert(0, staging_pt)
-                    self._avoid_target = dodge
-                    log.info("Cross blocks path to staging — dodge inserted at (%.0f,%.0f), staging=(%.0f,%.0f)",
-                             dodge[0], dodge[1], staging_pt[0], staging_pt[1])
+                    self._avoid_target = route[0]
+                    for extra in reversed(route[1:]):
+                        self._corner_waypoints.insert(0, extra)
+                else:
+                    log.warning("Cross blocks staging but no avoid route found — proceeding anyway")
 
         return State.AVOID
 
@@ -446,14 +484,15 @@ class GolfBotController:
         log.info("Collected ball")
         self._locked_target = None
         self._route.advance()
-        robot.collect()
+        robot.close_claw()
         self._pose.invalidate()
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
             log.debug("Wall ball — backing off")
             self._driver.reverse(px_to_rotations(STAGING_DISTANCE_PX/2))
             self._is_wall_ball = False
-            
+        
+        robot.gate_rotate()       
         robot.reset_claw()
 
         self._transition(State.SEEK)
@@ -590,6 +629,8 @@ class GolfBotController:
     # --- State: RELEASE / DONE -----------------------------------------------
 
     def _release_balls(self, pose, world) -> Command:
+        log.info("Releasing — robot at (%.1f, %.1f) cm, heading %.1f°",
+                 pose.pos[0], pose.pos[1], pose.angle)
         robot.gate_open()
         time.sleep(3)
         robot.gate_close()

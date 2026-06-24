@@ -144,7 +144,7 @@ def cross_approach_angle(ball_px, cross_px):
     raw = math.degrees(math.atan2(dy, dx))   # direction cross→ball
     approach = raw + 180.0                   # robot faces the opposite way
     # Snap only to the diagonals: 45, 135, -45, -135 (gaps between cross legs)
-    snapped = math.floor((approach + 45.0) / 90.0) * 90.0 + 45.0
+    snapped = round((approach - 45.0) / 90.0) * 90.0 + 45.0
     # Normalise to (-180, 180]
     while snapped >  180.0: snapped -= 360.0
     while snapped <= -180.0: snapped += 360.0

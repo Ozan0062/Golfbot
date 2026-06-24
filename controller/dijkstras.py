@@ -57,7 +57,13 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
             name_a, data_a = nodes[i]
             name_b, data_b = nodes[j]
             
-            weight = get_price(data_a["pos_px"], data_b["pos_px"], cross_px=CAMERA_CENTER_PX, cross_size_px=70*70, start_angle_deg=world.robot_angle)
+            weight = get_price(
+                data_a["pos_px"],
+                data_b["pos_px"],
+                cross_px=world.cross_px,
+                cross_size_px=70 * 70,
+                start_angle_deg=world.robot_angle,
+            )
             
             G.add_edge(name_a, name_b, weight=weight)
             

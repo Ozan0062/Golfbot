@@ -1,0 +1,41 @@
+{
+  "center_px": [
+    450,
+    300
+  ],
+  "zones": {
+    "0": {
+      "px_per_rot": 60.9886,
+      "deg_per_rot_left": 30.2956,
+      "deg_per_rot_right": 28.3498,
+      "samples_drive": 4,
+      "samples_turn_left": 4,
+      "samples_turn_right": 4
+    },
+    "1": {
+      "px_per_rot": 50.0115,
+      "deg_per_rot_left": 30.498,
+      "deg_per_rot_right": 28.9188,
+      "samples_drive": 4,
+      "samples_turn_left": 4,
+      "samples_turn_right": 4
+    },
+    "2": {
+      "px_per_rot": 47.6557,
+      "deg_per_rot_left": 30.6921,
+      "deg_per_rot_right": 29.336,
+      "samples_drive": 4,
+      "samples_turn_left": 4,
+      "samples_turn_right": 4
+    },
+    "3": {
+      "px_per_rot": 62.4033,
+      "deg_per_rot_left": 31.8081,
+      "deg_per_rot_right": 30.8691,
+      "samples_drive": 4,
+      "samples_turn_left": 4,
+      "samples_turn_right": 4
+    }
+  },
+  "last_updated": "2026-06-24T15:57:20.487071"
+}

@@ -484,16 +484,15 @@ class GolfBotController:
         log.info("Collected ball")
         self._locked_target = None
         self._route.advance()
-        robot.collect()
+        robot.close_claw()
         self._pose.invalidate()
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
             log.debug("Wall ball — backing off")
             self._driver.reverse(px_to_rotations(STAGING_DISTANCE_PX/2))
             self._is_wall_ball = False
-            
-        robot.collect()
-        time.sleep(0.2)   
+        
+        robot.gate_rotate()       
         robot.reset_claw()
 
         self._transition(State.SEEK)
@@ -630,6 +629,8 @@ class GolfBotController:
     # --- State: RELEASE / DONE -----------------------------------------------
 
     def _release_balls(self, pose, world) -> Command:
+        log.info("Releasing — robot at (%.1f, %.1f) cm, heading %.1f°",
+                 pose.pos[0], pose.pos[1], pose.angle)
         robot.gate_open()
         time.sleep(3)
         robot.gate_close()

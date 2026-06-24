@@ -104,9 +104,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 64.00   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 30.29   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 34.32   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 67.39   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 29.44   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 28.27   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

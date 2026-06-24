@@ -99,3 +99,7 @@ while True:
         elif cmd == "RESET_CLAW":
             claw.reset_claw()
             conn.sendall(b"OK")
+            
+        elif cmd == "CLOSE_CLAW":
+            claw.close_claw()
+            conn.sendall(b"OK")

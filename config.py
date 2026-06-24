@@ -38,6 +38,9 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 GOAL_POSITION_PX = (30, 300)   # claw target coordinate at the goal
 GOAL_POSITION_CM = (GOAL_POSITION_PX[0] * FIELD_WIDTH_CM / WARPED_WIDTH,
                     GOAL_POSITION_PX[1] * FIELD_HEIGHT_CM / WARPED_HEIGHT)
+# First navigate to this point on the goal lane, then face left and drive straight in.
+GOAL_LINEUP_PX = (220, GOAL_POSITION_PX[1])
+GOAL_LINEUP_ARRIVE_PX = 8
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive
@@ -51,6 +54,10 @@ MARKER_TO_CLAW_CM = 16.8     # HORIZONTAL (floor-plane) offset from the ArUco ma
 CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm). Informational only --
                              # the claw's floor position is derived geometrically from the
                              # marker, so no separate parallax step is applied to it.
+GOAL_RELEASE_MARKER_PX = (
+    GOAL_POSITION_PX[0] + MARKER_TO_CLAW_CM * WARPED_WIDTH / FIELD_WIDTH_CM,
+    GOAL_POSITION_PX[1],
+)
 
 COLLECT_RADIUS_CM = 5.0      # claw-tip -> ball distance (cm) at which we grab.
 COLLECT_RADIUS_PX = 8        # legacy pixel radius (kept for tooling/tests; the live

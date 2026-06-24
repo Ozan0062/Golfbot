@@ -42,9 +42,11 @@ from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from controller.dijkstras import get_path
 from config import (
-    GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
+    GOAL_LINEUP_ARRIVE_PX, GOAL_LINEUP_PX, GOAL_POSITION_CM, GOAL_POSITION_PX,
+    GOAL_RELEASE_MARKER_PX, WARPED_WIDTH, WARPED_HEIGHT,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, REVERSE_ROTATIONS,
+    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, MAX_DRIVE_PX, REVERSE_ROTATIONS,
+    GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG,
     CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
@@ -525,22 +527,18 @@ class GolfBotController:
         return Command.STOP
 
     # --- State: DRIVE_GOAL ---------------------------------------------------
-    # Treat the goal like a wall ball: stage the approach, then drive in with
-    # the same claw-tip logic as APPROACH. When the claw is within COLLECT_RADIUS_CM
-    # of GOAL_POSITION_CM, release instead of grabbing.
+    # Goal approach is a lane: reach a safe lineup point, face exactly left,
+    # drive straight into release position, then release.
 
     def _drive_to_goal(self, pose, world) -> Command:
-        if self._goal_waypoints is None:        # first entry — build staging route
-            self._goal_waypoints = corner_approach_waypoints(
-                pose.px, GOAL_POSITION_PX, GOAL_APPROACH_ANGLE_DEG,
-                CORNER_STAGE_DISTANCES_PX, WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
-            )
-            # Cross avoidance: if the cross blocks the first staging point, prepend avoid points.
+        if self._goal_waypoints is None:        # first entry — build route to the lineup lane
+            self._goal_waypoints = [GOAL_LINEUP_PX]
+            # Cross avoidance: if the cross blocks the lineup point, prepend avoid points.
             cross_px = world.cross_px
             if cross_px is not None and self._goal_waypoints:
-                staging_pt = self._goal_waypoints[0]
-                staging_clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
-                if not staging_clear:
+                lineup_pt = self._goal_waypoints[0]
+                lineup_clear, _ = path_is_clear(pose.px, lineup_pt, [cross_px], CROSS_CLEARANCE_PX)
+                if not lineup_clear:
                     avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
                     avoid_pts = list(avoid_map.values())
 
@@ -548,57 +546,61 @@ class GolfBotController:
                         ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
                         return ok
 
-                    single = sorted([pt for pt in avoid_pts if _clr(pose.px, pt) and _clr(pt, staging_pt)],
+                    single = sorted([pt for pt in avoid_pts if _clr(pose.px, pt) and _clr(pt, lineup_pt)],
                                     key=lambda p: math.hypot(p[0] - pose.px[0], p[1] - pose.px[1]))
                     if single:
                         self._goal_waypoints.insert(0, single[0])
-                        log.info("Goal: cross blocks staging — avoid via (%.0f,%.0f)", single[0][0], single[0][1])
+                        log.info("Goal: cross blocks lineup — avoid via (%.0f,%.0f)", single[0][0], single[0][1])
                     else:
                         pairs = [(p1, p2) for p1 in avoid_pts for p2 in avoid_pts
-                                 if p1 is not p2 and _clr(pose.px, p1) and _clr(p1, p2) and _clr(p2, staging_pt)]
+                                 if p1 is not p2 and _clr(pose.px, p1) and _clr(p1, p2) and _clr(p2, lineup_pt)]
                         if pairs:
                             p1, p2 = min(pairs, key=lambda p: math.hypot(p[0][0]-pose.px[0], p[0][1]-pose.px[1]))
                             self._goal_waypoints[:0] = [p1, p2]
-                            log.info("Goal: cross blocks staging — avoid via (%.0f,%.0f)→(%.0f,%.0f)",
+                            log.info("Goal: cross blocks lineup — avoid via (%.0f,%.0f)→(%.0f,%.0f)",
                                      p1[0], p1[1], p2[0], p2[1])
                         else:
-                            log.warning("Goal: cross blocks staging but no avoid route found — proceeding anyway")
-            log.info("Driving to goal — %d staging waypoint(s)", len(self._goal_waypoints))
+                            log.warning("Goal: cross blocks lineup but no avoid route found — proceeding anyway")
+            log.info("Driving to goal lineup — %d waypoint(s)", len(self._goal_waypoints))
 
         # Phase 1: work through staging waypoints (same as AVOID).
         if self._goal_waypoints:
-            command, arrived = self._driver.drive_toward(pose, self._goal_waypoints[0], AVOID_ARRIVE_PX)
+            arrive_radius = (
+                GOAL_LINEUP_ARRIVE_PX
+                if self._goal_waypoints[0] == GOAL_LINEUP_PX
+                else AVOID_ARRIVE_PX
+            )
+            command, arrived = self._driver.drive_toward(pose, self._goal_waypoints[0], arrive_radius)
             if arrived:
                 self._goal_waypoints.pop(0)
                 return Command.STOP
             return command
 
-        # Phase 2: final approach — same logic as APPROACH, targeting GOAL_POSITION_CM.
-        claw = _claw_tip_cm(pose.pos, pose.angle)
-        off  = math.hypot(claw[0] - GOAL_POSITION_CM[0], claw[1] - GOAL_POSITION_CM[1])
+        # Phase 2: face the goal lane exactly before driving in.
+        goal_heading_err = angle_error(pose.angle, GOAL_HEADING_DEG)
+        if abs(goal_heading_err) > GOAL_HEADING_TOL_DEG:
+            direction = Command.RIGHT if goal_heading_err > 0 else Command.LEFT
+            self._driver.turn(pose, angle_to_rotations(goal_heading_err), direction)
+            return direction
 
-        if off > COLLECT_RADIUS_CM:
-            command, arrived = self._driver.drive_toward(pose, GOAL_POSITION_PX, _APPROACH_ARRIVE_PX)
-            if not arrived:
-                return command
-            heading_error = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
-            if abs(heading_error) > ALIGN_THRESHOLD_DEG:
-                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
-                self._driver.turn(pose, angle_to_rotations(heading_error), direction)
-                return direction
-            nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
-            log.debug("Goal: claw short by %.1f cm — nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
-            self._driver.drive(pose, px_to_rotations(nudge_px))
+        # Phase 3: drive straight along the lane. Do not use drive_toward() here:
+        # if the robot is slightly above/below the lane, drive_toward would turn
+        # diagonally near the goal and release at a bad angle.
+        release_dx = pose.px[0] - GOAL_RELEASE_MARKER_PX[0]
+        if release_dx > GOAL_LINEUP_ARRIVE_PX:
+            drive_px = min(release_dx, MAX_DRIVE_PX)
+            log.debug("Goal: straight final drive %.0f px", drive_px)
+            self._driver.drive(pose, px_to_rotations(drive_px))
             return Command.FORWARD
 
-        # Claw within range — align heading then release.
-        heading_error = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
+        # Claw within range — verify fixed release heading, then release.
+        heading_error = angle_error(pose.angle, GOAL_HEADING_DEG)
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_error > 0 else Command.LEFT
             self._driver.turn(pose, angle_to_rotations(heading_error), direction)
             return direction
 
-        log.info("Claw at goal (%.1f cm off) — releasing", off)
+        log.info("At goal release marker — releasing")
         self._goal_waypoints = None
         self._transition(State.RELEASE)
         return Command.STOP

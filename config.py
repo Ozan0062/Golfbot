@@ -35,7 +35,7 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 # Both forms describe the SAME point (~30 px in from the wall) so the staged
 # drive-in (uses PX) and the release gate (uses CM) agree. Aiming the claw at the
 # wall plane (x=0) made the robot ram the wall and never satisfy the release.
-GOAL_POSITION_PX = (55, 300)   # claw target coordinate at the goal
+GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
 GOAL_POSITION_CM = (GOAL_POSITION_PX[0] * FIELD_WIDTH_CM / WARPED_WIDTH,
                     GOAL_POSITION_PX[1] * FIELD_HEIGHT_CM / WARPED_HEIGHT)
 # First navigate to this point on the goal lane, then face left and drive straight in.

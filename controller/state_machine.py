@@ -488,7 +488,7 @@ class GolfBotController:
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
             log.info("Wall/corner ball — backing off")
-            self._driver.reverse(px_to_rotations(REVERSE_ROTATIONS))
+            self._driver.reverse(REVERSE_ROTATIONS)
             self._is_wall_ball = False
         
         robot.gate_rotate()       

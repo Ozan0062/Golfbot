@@ -651,15 +651,16 @@ class GolfBotController:
             return Command.STOP
         self._goal_lane_rejections = 0
 
-        release_dx = pose.px[0] - GOAL_RELEASE_MARKER_PX[0]
-        if release_dx > GOAL_RELEASE_X_TOL_PX:
-            drive_px = min(release_dx - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
+        heading_x = math.cos(math.radians(GOAL_HEADING_DEG))
+        release_remaining_px = (GOAL_RELEASE_MARKER_PX[0] - pose.px[0]) * heading_x
+        if release_remaining_px > GOAL_RELEASE_X_TOL_PX:
+            drive_px = min(release_remaining_px - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
             log.debug("Goal final straight drive %.1f px toward release marker", drive_px)
             self._driver.drive(pose, px_to_rotations(drive_px))
             return Command.FORWARD
 
-        if release_dx < -GOAL_RELEASE_X_TOL_PX:
-            reverse_px = min(abs(release_dx) - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
+        if release_remaining_px < -GOAL_RELEASE_X_TOL_PX:
+            reverse_px = min(abs(release_remaining_px) - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
             log.info(
                 "Goal release pose rejected — marker x %.1f overshot release x %.1f; backing up %.1f px",
                 pose.px[0], GOAL_RELEASE_MARKER_PX[0], reverse_px,
@@ -686,7 +687,7 @@ class GolfBotController:
                  pose.pos[0], pose.pos[1], pose.angle)
         robot.gate_open()
         time.sleep(3)
-        robot.gate_open()
+        robot.gate_close()
         # Don't finish yet — back up and rescan in case new balls have appeared
         # since we committed to the goal. REVERSE_WHITE -> REVERSE_ORANGE will
         # route to SEEK if anything is found, or to DONE if the field is empty.

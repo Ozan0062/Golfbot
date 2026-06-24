@@ -71,7 +71,7 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         controller.state = State.DRIVE_GOAL
         controller._goal_waypoints = []
         controller._driver.drive = lambda pose, rotations: calls.append(rotations)
-        world = world_state(robot=(100.0, 60.0), robot_px=(500, 300), robot_angle=180.0)
+        world = world_state(robot=(100.0, 60.0), robot_px=(500, 300), robot_angle=0.0)
 
         command = controller.update(world)
 
@@ -89,8 +89,8 @@ class StateMachineReverseGoalTests(unittest.TestCase):
 
         command = controller.update(world)
 
-        self.assertIs(command, Command.LEFT)
-        self.assertEqual(calls[0][1], Command.LEFT)
+        self.assertIs(command, Command.RIGHT)
+        self.assertEqual(calls[0][1], Command.RIGHT)
 
     def test_drive_goal_reverses_when_heading_correction_gets_stuck(self):
         calls = []
@@ -118,7 +118,7 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         world = world_state(
             robot=(GOAL_RELEASE_MARKER_PX[0] * 169.0 / 900, 65.0),
             robot_px=(GOAL_RELEASE_MARKER_PX[0], GOAL_RELEASE_MARKER_PX[1] + 20),
-            robot_angle=180.0,
+            robot_angle=0.0,
         )
 
         command = controller.update(world)
@@ -135,7 +135,7 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         world = world_state(
             robot=(GOAL_RELEASE_MARKER_PX[0] * 169.0 / 900, 60.0),
             robot_px=GOAL_RELEASE_MARKER_PX,
-            robot_angle=180.0,
+            robot_angle=0.0,
         )
 
         command = controller.update(world)

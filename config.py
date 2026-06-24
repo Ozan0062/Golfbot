@@ -31,15 +31,15 @@ CAMERA_CENTER_PX = (446, 350)
 # Set to at least half the robot's widest dimension.
 FIELD_SAFETY_MARGIN_CM = 15.0
 
-# Goal: treated like a ball sitting just inside the left wall, vertically centred.
-# Both forms describe the SAME point (~30 px in from the wall) so the staged
+# Goal: treated like a ball sitting just inside the right wall, vertically centred.
+# Both forms describe the SAME point (~860 px in the warped field) so the staged
 # drive-in (uses PX) and the release gate (uses CM) agree. Aiming the claw at the
-# wall plane (x=0) made the robot ram the wall and never satisfy the release.
-GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
+# wall plane made the robot ram the wall and never satisfy the release.
+GOAL_POSITION_PX = (860, 300)   # claw target coordinate at the goal
 GOAL_POSITION_CM = (GOAL_POSITION_PX[0] * FIELD_WIDTH_CM / WARPED_WIDTH,
                     GOAL_POSITION_PX[1] * FIELD_HEIGHT_CM / WARPED_HEIGHT)
-# First navigate to this point on the goal lane, then face left and drive straight in.
-GOAL_LINEUP_PX = (220, GOAL_POSITION_PX[1])
+# First navigate to this point on the goal lane, then face right and drive straight in.
+GOAL_LINEUP_PX = (680, GOAL_POSITION_PX[1])
 GOAL_LINEUP_ARRIVE_PX = 8
 
 # --- State-machine / navigation tuning ---------------------------------------
@@ -55,7 +55,7 @@ CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm). Information
                              # the claw's floor position is derived geometrically from the
                              # marker, so no separate parallax step is applied to it.
 GOAL_RELEASE_MARKER_PX = (
-    GOAL_POSITION_PX[0] + MARKER_TO_CLAW_CM * WARPED_WIDTH / FIELD_WIDTH_CM,
+    GOAL_POSITION_PX[0] - MARKER_TO_CLAW_CM * WARPED_WIDTH / FIELD_WIDTH_CM,
     GOAL_POSITION_PX[1],
 )
 GOAL_RELEASE_X_TOL_PX = 8       # marker must be this close in x before opening gate
@@ -76,7 +76,7 @@ COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correcti
                              # so the motor command is always large enough to execute.
 
 GOAL_ARRIVE_PX = 100         # arrive radius (px) for the final goal approach
-GOAL_HEADING_DEG     = 180.0  # required robot heading when entering the goal
+GOAL_HEADING_DEG     = 0.0    # required robot heading when entering the goal
 GOAL_HEADING_TOL_DEG = 5.0    # tolerance either side of GOAL_HEADING_DEG
 REVERSE_ROTATIONS = 1      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
@@ -103,7 +103,7 @@ STAGING_DISTANCE_PX = 150    # standoff for the final straight-in approach.
 # One staging point per wall/corner ball: 1x the staging distance.
 CORNER_STAGE_DISTANCES_PX = (STAGING_DISTANCE_PX,)
 FIELD_EDGE_MARGIN_PX = 30    # keep staging waypoints this far inside the field edges
-GOAL_APPROACH_ANGLE_DEG = 180.0   # goal is on the left wall -> approach heading left
+GOAL_APPROACH_ANGLE_DEG = 0.0     # goal is on the right wall -> approach heading right
 
 # --- YOLO models -------------------------------------------------------------
 BASE_DIR          = os.path.dirname(os.path.abspath(__file__))

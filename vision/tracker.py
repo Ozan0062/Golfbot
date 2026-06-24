@@ -228,6 +228,9 @@ def build_world_state(detections, robot_center, robot_angle, image_w, image_h) -
     Contains both cm (for angle/bearing maths) and px (for drive distances).
     """
     world             = extract_objects(pixels_to_cm(detections, image_w, image_h))
+    if world.cross_px is None:
+        world.cross_px = (image_w / 2, image_h / 2)
+        world.cross = robot_px_to_cm(world.cross_px, image_w, image_h)
     world.robot       = robot_px_to_cm(robot_center, image_w, image_h)
     world.robot_px    = robot_center
     world.robot_angle = robot_angle

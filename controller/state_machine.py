@@ -408,7 +408,13 @@ class GolfBotController:
                     for extra in reversed(route[1:]):
                         self._corner_waypoints.insert(0, extra)
                 else:
-                    log.warning("Cross blocks staging but no avoid route found — proceeding anyway")
+                    escape = min(avoid_pts, key=lambda pt: _dst(pose.px, pt))
+                    self._corner_waypoints.insert(0, staging_pt)
+                    self._avoid_target = escape
+                    log.warning(
+                        "Cross blocks staging and no fully clear route was found — escaping via avoid point (%.0f,%.0f)",
+                        escape[0], escape[1],
+                    )
 
         return State.AVOID
 
@@ -489,6 +495,9 @@ class GolfBotController:
             self._transition(State.SEEK)
             return Command.STOP
 
+        if self._approach_path_blocked_by_cross(pose, target, world):
+            return Command.STOP
+
         # Arrival is gated on the claw tip (not the marker), measured in cm on the
         # floor plane where the scale is uniform: project MARKER_TO_CLAW_CM forward
         # of the height-corrected marker along the heading.
@@ -528,6 +537,31 @@ class GolfBotController:
             return direction
 
         return self._grab_ball(pose)
+
+    def _approach_path_blocked_by_cross(self, pose, target, world):
+        cross_px = world.cross_px
+        if cross_px is None or target.px is None:
+            return False
+
+        # Balls at the cross intentionally use the cross pickup path.
+        if math.hypot(target.px[0] - cross_px[0], target.px[1] - cross_px[1]) <= cross_trigger_radius(CROSS_RADIUS_PX):
+            return False
+
+        clear, _ = path_is_clear(pose.px, target.px, [cross_px], CROSS_CLEARANCE_PX)
+        if clear:
+            return False
+
+        zone, walls = classify_zone(target.px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
+        log.info(
+            "Cross blocks live approach path — robot=(%.0f,%.0f) target=(%.0f,%.0f); re-planning before driving",
+            pose.px[0], pose.px[1], target.px[0], target.px[1],
+        )
+        if zone in ("wall", "corner"):
+            self._is_wall_ball = True
+            self._transition(self._begin_staged_approach(pose, target, walls, zone, world))
+            return True
+
+        return self._cross_blocks_path(pose, target, world)
 
     def _grab_ball(self, pose) -> Command:
         """Close the claw on the locked target and return to SEEK."""

@@ -118,6 +118,7 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
         self.assertIs(command, Command.STOP)
         self.assertIs(controller.state, State.AVOID)
         self.assertTrue(controller._is_wall_ball)
+        self.assertNotEqual(controller._avoid_target, target_px)
         clear, _ = path_is_clear(
             controller._avoid_target, target_px, [cross_px], CROSS_CLEARANCE_PX
         )
@@ -197,6 +198,27 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
 
         self.assertIs(command, Command.FORWARD)
         self.assertIs(controller.state, State.AVOID)
+
+    def test_approach_replans_instead_of_driving_through_cross(self):
+        target_px = (450, 540)
+        cross_px = (450, 300)
+        controller = GolfBotController()
+        controller.state = State.APPROACH
+        controller._locked_target = RouteTarget(cm=(85.0, 112.0), px=target_px, dist_px=150.0)
+        controller._is_wall_ball = True
+        controller._driver.drive_toward = lambda pose, wp, arrive: (Command.FORWARD, False)
+        world = world_state(
+            robot=(85.0, 81.0),
+            robot_px=(450, 390),
+            robot_angle=90.0,
+            cross_px=cross_px,
+        )
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.AVOID)
+        self.assertTrue(controller._is_wall_ball)
 
 
 if __name__ == "__main__":

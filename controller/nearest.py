@@ -5,10 +5,16 @@ from config import CAMERA_CENTER_PX, GOAL_POSITION_CM
 from controller.motion import get_price
 from vision.tracker import WorldState
 
-def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
+def create_nodes_and_edges(world: WorldState, ignored_px=None) -> nx.DiGraph:
     G = nx.DiGraph()
     
     from config import GOAL_POSITION_PX
+    ignored_px = ignored_px or []
+
+    def is_ignored(pos_px):
+        if pos_px is None:
+            return False
+        return any(math.dist((pos_px[0], pos_px[1]), ignored) < 12 for ignored in ignored_px)
     
     # 1. Add Robot node
     if world.robot and world.robot_px:
@@ -20,6 +26,8 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     for ball_cm, ball_px in zip(world.white_balls, world.white_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
+        if is_ignored(pos_px):
+            continue
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="open", penalty=0)
         ball_idx += 1
         
@@ -27,6 +35,8 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     for ball_cm, ball_px in zip(world.white_wall_balls, world.white_wall_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
+        if is_ignored(pos_px):
+            continue
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="wall", penalty=0)
         ball_idx += 1
         
@@ -34,6 +44,8 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     for ball_cm, ball_px in zip(world.white_corner_balls, world.white_corner_balls_px):
         pos_cm = (ball_cm[0], ball_cm[1])
         pos_px = (ball_px[0], ball_px[1])
+        if is_ignored(pos_px):
+            continue
         G.add_node(f"wb_{ball_idx}", pos=pos_cm, pos_px=pos_px, type="corner", penalty=0)
         ball_idx += 1
         
@@ -41,8 +53,9 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
     if world.ob and world.ob_px:
         pos_cm = (world.ob[0], world.ob[1])
         pos_px = (world.ob_px[0], world.ob_px[1])
-        zone = world.ob[2] if len(world.ob) > 2 else "open"
-        G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=0)
+        if not is_ignored(pos_px):
+            zone = world.ob[2] if len(world.ob) > 2 else "open"
+            G.add_node("ob", pos=pos_cm, pos_px=pos_px, type=zone, penalty=0)
         
     G.add_node("goal", pos=GOAL_POSITION_CM, pos_px=GOAL_POSITION_PX, type="goal", penalty=0.0)
     
@@ -72,8 +85,8 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         
     return G
 
-def find_nearest(world: WorldState) -> dict | None:
-    G = create_nodes_and_edges(world)
+def find_nearest(world: WorldState, ignored_px=None) -> dict | None:
+    G = create_nodes_and_edges(world, ignored_px)
     
     if not G.has_node("robot"):
         return None

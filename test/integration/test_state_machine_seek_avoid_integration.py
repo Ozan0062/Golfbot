@@ -55,6 +55,29 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
         self.assertIs(command, Command.STOP)
         self.assertIs(controller.state, State.APPROACH)
 
+    def test_seek_skips_ball_too_close_to_robot_and_picks_next(self):
+        controller = GolfBotController()
+        world = world_state(
+            robot=(20.0, 20.0),
+            robot_px=(100, 100),
+            robot_angle=0.0,
+            white_balls=[(21.0, 20.0, "open"), (80.0, 20.0, "open")],
+            white_balls_px=[(105, 100, "open"), (440, 100, "open")],
+        )
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.SEEK)
+        self.assertIsNone(controller._locked_target)
+        self.assertEqual(controller._skipped_target_px, [(105, 100)])
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.APPROACH)
+        self.assertEqual(controller._locked_target.px[:2], (440, 100))
+
     def test_ball_at_the_cross_is_collected_with_staged_approach(self):
         controller = self._controller_with_target(
             RouteTarget(cm=(85.0, 75.0), px=(470, 320), dist_px=430.0)

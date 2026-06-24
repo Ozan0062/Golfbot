@@ -108,6 +108,7 @@ class GolfBotController:
         self._driver = Driver(self._cal, self._pose)
 
         self._locked_target         = None   # RouteTarget the robot is going for
+        self._skipped_target_px     = []     # detections too close to the robot marker to retry
         self._avoid_target          = None   # waypoint currently being driven to (px)
         self._corner_waypoints      = []     # staging waypoints still to visit
         self._corner_approach_angle = None   # heading held through a wall/corner approach (deg)
@@ -152,7 +153,7 @@ class GolfBotController:
         """Pick the closest remaining ball and decide how to approach it."""
         
         if self._locked_target is None:
-            target_dict = find_nearest(world)
+            target_dict = find_nearest(world, ignored_px=self._skipped_target_px)
             self._locked_target = self._route.get_target_nearest(target_dict, pose.px, world)
         
         if self._locked_target is None:
@@ -170,11 +171,12 @@ class GolfBotController:
         # already-handled detection sitting near the robot), so drop it and pick
         # the next target on the following tick.
         if target.px is not None:
-            skip_radius = ROBOT_FILTER_RADIUS_PX / 5 #2 pixels, go next
+            skip_radius = ROBOT_FILTER_RADIUS_PX / 5
             dist_to_target = math.hypot(target.px[0] - pose.px[0], target.px[1] - pose.px[1])
             if dist_to_target < skip_radius:
                 log.info("Target only %.0f px away (< %.0f) — skipping to the next target",
                          dist_to_target, skip_radius)
+                self._skipped_target_px.append((target.px[0], target.px[1]))
                 self._reset_targeting()
                 self._locked_target = None
                 return Command.STOP
@@ -508,6 +510,7 @@ class GolfBotController:
         log.info("Collected ball")
         self._delivered = False   # new load on board — deliver it before finishing
         self._locked_target = None
+        self._skipped_target_px = []
         self._route.advance()
         robot.close_claw()
         self._pose.invalidate()

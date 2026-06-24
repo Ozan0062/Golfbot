@@ -7,16 +7,13 @@ import unittest
 from unittest.mock import patch
 
 from controller.pose_cache import POSE_TIMEOUT_S, SETTLE_S, PoseCache
+from test.world_state_helpers import world_state
 
 
 class PoseCacheUnitTests(unittest.TestCase):
     def test_update_returns_fresh_pose_from_world_dict(self):
         cache = PoseCache()
-        world = {
-            "robot": (10.0, 20.0),
-            "robot_px": (100, 200),
-            "robot_angle": 45.0,
-        }
+        world = world_state(robot=(10.0, 20.0), robot_px=(100, 200), robot_angle=45.0)
 
         with patch("builtins.print"), patch("controller.pose_cache.time.time", return_value=1.0):
             pose = cache.update(world)
@@ -27,11 +24,7 @@ class PoseCacheUnitTests(unittest.TestCase):
 
     def test_cached_pose_is_returned_until_timeout(self):
         cache = PoseCache()
-        world = {
-            "robot": (10.0, 20.0),
-            "robot_px": (100, 200),
-            "robot_angle": 45.0,
-        }
+        world = world_state(robot=(10.0, 20.0), robot_px=(100, 200), robot_angle=45.0)
 
         with patch("builtins.print"), patch("controller.pose_cache.time.time", return_value=1.0):
             cache.update(world)
@@ -40,18 +33,14 @@ class PoseCacheUnitTests(unittest.TestCase):
             "controller.pose_cache.time.time",
             return_value=1.0 + POSE_TIMEOUT_S / 2,
         ):
-            pose = cache.update({"robot": None, "robot_angle": None})
+            pose = cache.update(world_state(robot=None, robot_angle=None))
 
         self.assertIsNotNone(pose)
         self.assertEqual(pose.pos, (10.0, 20.0))
 
     def test_cached_pose_expires_after_timeout(self):
         cache = PoseCache()
-        world = {
-            "robot": (10.0, 20.0),
-            "robot_px": (100, 200),
-            "robot_angle": 45.0,
-        }
+        world = world_state(robot=(10.0, 20.0), robot_px=(100, 200), robot_angle=45.0)
 
         with patch("builtins.print"), patch("controller.pose_cache.time.time", return_value=1.0):
             cache.update(world)
@@ -60,7 +49,7 @@ class PoseCacheUnitTests(unittest.TestCase):
             "controller.pose_cache.time.time",
             return_value=1.0 + POSE_TIMEOUT_S + 0.1,
         ):
-            pose = cache.update({"robot": None, "robot_angle": None})
+            pose = cache.update(world_state(robot=None, robot_angle=None))
 
         self.assertIsNone(pose)
 
@@ -75,7 +64,7 @@ class PoseCacheUnitTests(unittest.TestCase):
             return_value=10.0 + SETTLE_S / 2,
         ):
             pose = cache.update(
-                {"robot": (10.0, 20.0), "robot_px": (100, 200), "robot_angle": 45.0}
+                world_state(robot=(10.0, 20.0), robot_px=(100, 200), robot_angle=45.0)
             )
 
         self.assertIsNone(pose)

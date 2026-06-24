@@ -22,7 +22,7 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
 
     def _controller_with_target(self, target):
         controller = GolfBotController()
-        controller._route.get_target_dijkstras = lambda path, robot_px, world: target
+        controller._route.get_target_nearest = lambda path, robot_px, world: target
         return controller
 
     def test_seek_uses_avoid_state_when_cross_blocks_path(self):
@@ -36,7 +36,7 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
             cross_px=(300, 100),
         )
 
-        with patch("controller.state_machine.get_path", return_value=[{"pos_px": (500, 100)}]):
+        with patch("controller.state_machine.find_nearest", return_value={"pos_px": (500, 100)}):
             command = controller.update(world)
 
         self.assertIs(command, Command.STOP)
@@ -49,7 +49,7 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
         )
         world = world_state(robot=(20.0, 60.0), robot_px=(100, 300), robot_angle=0.0)
 
-        with patch("controller.state_machine.get_path", return_value=[{"pos_px": (500, 300)}]):
+        with patch("controller.state_machine.find_nearest", return_value={"pos_px": (500, 300)}):
             command = controller.update(world)
 
         self.assertIs(command, Command.STOP)
@@ -66,7 +66,7 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
             cross_px=(450, 300),
         )
 
-        with patch("controller.state_machine.get_path", return_value=[{"pos_px": (470, 320)}]):
+        with patch("controller.state_machine.find_nearest", return_value={"pos_px": (470, 320)}):
             command = controller.update(world)
 
         self.assertIs(command, Command.STOP)

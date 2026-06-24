@@ -8,10 +8,11 @@ import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from vision.tracker import WorldState
-from controller.dijkstras import create_nodes_and_edges, calculate_best_route
+from controller.nearest import find_nearest
+from controller.motion import get_price
 from config import WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
 from controller.navigation import cm_to_pixels
-from scripts.visualize_dijkstras import draw_state
+from scripts.visualize_nearest import draw_state
 
 # --- Configuration ---
 TEST_RUNS = 100
@@ -85,20 +86,22 @@ def run_simulation(world, ax=None, fig=None):
             fig.canvas.flush_events()
             plt.pause(0.3) 
         
-        # Creates nodes and edges and calculates best route    
-        G = create_nodes_and_edges(world)
-        best_route = calculate_best_route(G)
+        target = find_nearest(world)
         
-        if not best_route:
+        if not target:
             break
             
-        target = best_route[0]
         target_id = target["id"]
         
-        # Get the distance/weight from Dijkstra's algorithm for this exact move
+        # Get the distance/weight from Nearest's algorithm for this exact move
         try:
-            lengths = nx.single_source_dijkstra_path_length(G, source="robot", weight="weight")
-            step_weight = lengths[target_id]
+            step_weight = get_price(
+                world.robot_px,
+                target["pos_px"],
+                cross_px=world.cross_px,
+                cross_size_px=70 * 70,
+                start_angle_deg=world.robot_angle,
+            )
         except Exception:
             step_weight = 0.0
             

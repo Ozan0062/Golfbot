@@ -46,70 +46,60 @@ def create_nodes_and_edges(world: WorldState) -> nx.DiGraph:
         
     G.add_node("goal", pos=GOAL_POSITION_CM, pos_px=GOAL_POSITION_PX, type="goal", penalty=0.0)
     
-    # 6. Create edges between all nodes
+    # 6. Create edges ONLY from the robot to all other nodes (for Nearest Neighbor)
+    if not G.has_node("robot"):
+        return G
+        
+    robot_data = G.nodes["robot"]
     nodes = list(G.nodes(data=True))
     
-    for i in range(len(nodes)):
-        for j in range(len(nodes)):
-            if i == j:
-                continue
-                
-            name_a, data_a = nodes[i]
-            name_b, data_b = nodes[j]
+    for name_b, data_b in nodes:
+        if name_b == "robot" or name_b == "goal":
+            continue
             
+        try:
             weight = get_price(
-                data_a["pos_px"],
+                robot_data["pos_px"],
                 data_b["pos_px"],
                 cross_px=world.cross_px,
                 cross_size_px=70 * 70,
                 start_angle_deg=world.robot_angle,
             )
+        except Exception:
+            weight = float('inf')
             
-            G.add_edge(name_a, name_b, weight=weight)
-            
+        G.add_edge("robot", name_b, weight=weight)
+        
     return G
 
-def calculate_best_route(G: nx.DiGraph) -> list[dict]:
+def find_nearest(world: WorldState) -> dict | None:
+    G = create_nodes_and_edges(world)
+    
     if not G.has_node("robot"):
-        return []
+        return None
         
-    try:
-        lengths = nx.single_source_dijkstra_path_length(G, source="robot", weight="weight")
-    except nx.NodeNotFound:
-        return []
+    # Find all white balls directly connected to the robot
+    white_balls = []
+    for neighbor in G.successors("robot"):
+        if str(neighbor).startswith("wb_"):
+            weight = G["robot"][neighbor].get("weight", float('inf'))
+            white_balls.append((neighbor, weight))
+            
+    # If there are white balls, return the nearest
+    if white_balls:
+        white_balls.sort(key=lambda x: x[1])
+        node_id = white_balls[0][0]
+    elif G.has_node("ob"):
+        # If no white balls, go for orange ball
+        node_id = "ob"
+    else:
+        return None
         
-    # Extract reachable white balls directly in the order Dijkstra discovered them
-    sorted_whites = [node for node in lengths if str(node).startswith("wb_")]
-    
-    # Append any unreachable white balls at the end, just in case
-    unreachable_whites = [n for n in G.nodes() if n.startswith("wb_") and n not in lengths]
-    sorted_whites.extend(unreachable_whites)
-    
-    path_nodes = sorted_whites
-    
-    # Always add the orange ball last
-    if G.has_node("ob"):
-        path_nodes.append("ob")
-        
-        
-    # Format output with positions and types
-    result = []
-    for node_id in path_nodes:
-        node_data = G.nodes[node_id]
-        pos_cm = node_data["pos"]
-        pos_px = node_data.get("pos_px", (0, 0))
-        
-        result.append({
-            "id": node_id,
-            "pos_cm": pos_cm,
-            "pos_px": pos_px,
-            "type": node_data["type"]
-        })
-        
-    return result
-
-def get_path(world: WorldState):
-    graph = create_nodes_and_edges(world)
-    path  =  calculate_best_route(graph)
-    return path
+    node_data = G.nodes[node_id]
+    return {
+        "id": node_id,
+        "pos_cm": node_data["pos"],
+        "pos_px": node_data.get("pos_px", (0, 0)),
+        "type": node_data["type"]
+    }
  

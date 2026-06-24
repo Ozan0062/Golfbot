@@ -68,11 +68,10 @@ class RouteManager:
         # Nothing left
         return None
     
-    def get_target_dijkstras(self, path: list[dict], robot_px: tuple, world) -> Optional[RouteTarget]:
-        if not path:
+    def get_target_nearest(self, target: dict | None, robot_px: tuple, world) -> Optional[RouteTarget]:
+        if not target:
             return None
             
-        target = path[0]
         target_cm = target.get("pos_cm", target.get("pos"))
         target_px = target.get("pos_px")
         

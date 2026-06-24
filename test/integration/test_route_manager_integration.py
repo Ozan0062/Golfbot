@@ -99,20 +99,20 @@ class RouteManagerIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(target)
 
-    def test_route_manager_uses_first_dijkstra_path_step_as_target(self):
+    def test_route_manager_uses_first_nearest_path_step_as_target(self):
         manager = RouteManager()
         path = [{"pos_cm": (40.0, 20.0), "pos_px": (220, 100), "type": "open"}]
 
-        target = manager.get_target_dijkstras(path, robot_px=(100, 100), world=world_state())
+        target = manager.get_target_nearest(path, robot_px=(100, 100), world=world_state())
 
         self.assertEqual(target.cm, (40.0, 20.0))
         self.assertEqual(target.px, (220, 100))
         self.assertAlmostEqual(target.dist_px, 120.0)
 
-    def test_route_manager_returns_none_for_empty_dijkstra_path(self):
+    def test_route_manager_returns_none_for_empty_nearest_path(self):
         manager = RouteManager()
 
-        self.assertIsNone(manager.get_target_dijkstras([], robot_px=(100, 100), world=world_state()))
+        self.assertIsNone(manager.get_target_nearest([], robot_px=(100, 100), world=world_state()))
 
     def test_dist_returns_euclidean_distance(self):
         self.assertAlmostEqual(_dist((0, 0), (3, 4)), 5.0)

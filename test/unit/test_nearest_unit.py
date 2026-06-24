@@ -1,20 +1,19 @@
 """
-test_dijkstras_unit.py - offline unit tests for route graph planning.
+test_nearest_unit.py - offline unit tests for route graph planning.
 Uses synthetic WorldState objects, so no camera, YOLO model, or robot is needed.
 """
 
 import unittest
 
-from controller.dijkstras import (
-    calculate_best_route,
+from controller.nearest import (
+    find_nearest,
     create_nodes_and_edges,
-    get_path,
     line_intersects_obstacle,
 )
 from test.world_state_helpers import world_state
 
 
-class DijkstrasUnitTests(unittest.TestCase):
+class NearestUnitTests(unittest.TestCase):
     def test_line_intersects_obstacle_only_when_cross_is_on_forward_segment(self):
         self.assertTrue(
             line_intersects_obstacle((0, 0), (10, 0), (5, 1), clearance=2)
@@ -49,7 +48,7 @@ class DijkstrasUnitTests(unittest.TestCase):
         self.assertEqual(len([node for node in graph.nodes if str(node).startswith("wb_")]), 3)
         self.assertGreater(graph.number_of_edges(), graph.number_of_nodes())
 
-    def test_calculate_best_route_returns_white_balls_then_orange(self):
+    def test_find_nearest_returns_nearest_white_ball(self):
         world = world_state(
             robot=(20.0, 20.0),
             robot_px=(100, 100),
@@ -60,18 +59,30 @@ class DijkstrasUnitTests(unittest.TestCase):
             ob_px=(800, 400, "open"),
         )
 
-        path = calculate_best_route(create_nodes_and_edges(world))
+        target = find_nearest(world)
+        self.assertIsNotNone(target)
+        self.assertTrue(target["id"].startswith("wb_"))
+        
+    def test_find_nearest_returns_orange_when_no_whites(self):
+        world = world_state(
+            robot=(20.0, 20.0),
+            robot_px=(100, 100),
+            robot_angle=0.0,
+            ob=(150.0, 80.0, "open"),
+            ob_px=(800, 400, "open"),
+        )
 
-        self.assertEqual([step["id"] for step in path][-1], "ob")
-        self.assertTrue(all(step["id"].startswith("wb_") for step in path[:-1]))
+        target = find_nearest(world)
+        self.assertIsNotNone(target)
+        self.assertEqual(target["id"], "ob")
 
-    def test_get_path_returns_empty_when_robot_is_missing(self):
+    def test_find_nearest_returns_none_when_robot_is_missing(self):
         world = world_state(
             white_balls=[(40.0, 20.0, "open")],
             white_balls_px=[(220, 100, "open")],
         )
 
-        self.assertEqual(get_path(world), [])
+        self.assertIsNone(find_nearest(world))
 
 
 if __name__ == "__main__":

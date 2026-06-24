@@ -331,6 +331,20 @@ class GolfBotController:
             pose.px, target.px, approach_angle, CORNER_STAGE_DISTANCES_PX,
             WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
         )
+
+        cross_px = world.cross_px if world is not None else None
+        if cross_px is not None and label in ("wall", "corner") and waypoints:
+            safe_final_stage = self._cross_safe_final_stage(
+                waypoints[-1], target.px, approach_angle, cross_px
+            )
+            if safe_final_stage != waypoints[-1]:
+                log.info(
+                    "Cross blocks final wall approach — moving final staging point from (%.0f,%.0f) to (%.0f,%.0f)",
+                    waypoints[-1][0], waypoints[-1][1],
+                    safe_final_stage[0], safe_final_stage[1],
+                )
+                waypoints[-1] = safe_final_stage
+
         self._avoid_target          = waypoints[0]
         self._corner_waypoints      = waypoints[1:]
         # Staging points are placed in pixel space (raw `approach_angle`); the
@@ -344,7 +358,6 @@ class GolfBotController:
 
         # If the cross blocks the path to the first staging point, route around it
         # using the 4 fixed cardinal avoid points (same logic as _cross_blocks_path).
-        cross_px = world.cross_px if world is not None else None
         if cross_px is not None:
             staging_pt = self._avoid_target
             staging_clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
@@ -398,6 +411,26 @@ class GolfBotController:
                     log.warning("Cross blocks staging but no avoid route found — proceeding anyway")
 
         return State.AVOID
+
+    def _cross_safe_final_stage(self, stage_px, target_px, approach_angle, cross_px):
+        clear, _ = path_is_clear(stage_px, target_px, [cross_px], CROSS_CLEARANCE_PX)
+        if clear:
+            return stage_px
+
+        max_dist = max(CORNER_STAGE_DISTANCES_PX) if CORNER_STAGE_DISTANCES_PX else 0
+        for dist in range(int(max_dist), FIELD_EDGE_MARGIN_PX - 1, -10):
+            candidate = corner_approach_waypoints(
+                stage_px, target_px, approach_angle, (dist,),
+                WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
+            )[0]
+            candidate_clear, _ = path_is_clear(candidate, target_px, [cross_px], CROSS_CLEARANCE_PX)
+            if candidate_clear:
+                return candidate
+
+        log.warning(
+            "Cross blocks final wall approach and no safe staging point was found — keeping original staging point"
+        )
+        return stage_px
 
     # --- State: AVOID --------------------------------------------------------
 

@@ -65,7 +65,6 @@ MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check o
 CROSS_CLEARANCE_PX     = 70                       # stay at least this far from the cross centre
                                                   # cross is 10 cm radius ≈ 53 px + ~17 px robot buffer
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
-CROSS_RADIUS_PX        = 50                       # default cross radius when vision doesn't provide a size
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
 # --- Cross pickup (ball sitting in/at the centre cross) ----------------------
@@ -105,9 +104,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 63.54   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 27.61   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 34.12   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 63.32   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 28.33   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 34.47   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

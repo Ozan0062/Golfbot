@@ -46,7 +46,7 @@ from config import (
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
     ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, GOAL_ARRIVE_PX,
     GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
-    MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
+    CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
     MARKER_TO_CLAW_CM, CROSS_RADIUS_PX,
@@ -55,12 +55,15 @@ from golfbot_logger import get_logger
 from vision.tracker import WorldState
 
 
+# Smaller of the two anisotropic px/cm scales. Converting a claw-frame cm distance
+# with the smaller scale gives a conservative pixel distance, so the claw always
+# reaches the ball (never stalls short) whatever the heading.
+_PX_PER_CM_MIN = min(WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
+
 # On the final drive-in, stop the marker about one arm-length short of the ball so
-# the claw lands on it. Use the smaller of the two px/cm scales so the claw always
-# reaches the ball (never stalls short) whatever the heading; the precise grab is
-# gated on the cm claw-to-ball distance, not on this coarse pixel arrival.
-_APPROACH_ARRIVE_PX = MARKER_TO_CLAW_CM * min(WARPED_WIDTH / FIELD_WIDTH_CM,
-                                              WARPED_HEIGHT / FIELD_HEIGHT_CM)
+# the claw lands on it. The precise grab is gated on the cm claw-to-ball distance
+# (COLLECT_RADIUS_CM), not on this coarse pixel arrival.
+_APPROACH_ARRIVE_PX = MARKER_TO_CLAW_CM * _PX_PER_CM_MIN
 
 
 def _claw_tip_cm(robot_pos_cm, robot_angle_deg):
@@ -138,9 +141,9 @@ class GolfBotController:
 
     def _seek(self, pose, world) -> Command:
         """Pick the closest remaining ball and decide how to approach it."""
-        path = get_path(world)
         
         if self._locked_target is None:
+            path = get_path(world)
             self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
         
         if self._locked_target is None:
@@ -389,16 +392,32 @@ class GolfBotController:
             self._transition(State.SEEK)
             return Command.STOP
 
-        # Use the claw tip (not the marker) as the reference for arrival.
-        # In floor-projected space the scale is uniform so projecting by
-        # MARKER_TO_CLAW_PX along the corrected heading gives the true claw position.
+        # Arrival is gated on the claw tip (not the marker), measured in cm on the
+        # floor plane where the scale is uniform: project MARKER_TO_CLAW_CM forward
+        # of the height-corrected marker along the heading.
         claw = _claw_tip_cm(pose.pos, pose.angle)
         off  = math.hypot(claw[0] - target.cm[0], claw[1] - target.cm[1])
 
+        # Not within collect range yet: drive the marker in (it stops ~one arm-length
+        # short so the claw lands on the ball). If the marker reached that stop point
+        # but the claw is still short, re-align when the heading swung it off,
+        # otherwise nudge straight in by the shortfall. We never grab until the claw
+        # is actually within COLLECT_RADIUS_CM.
         if off > COLLECT_RADIUS_CM:
             command, arrived = self._driver.drive_toward(pose, target.px, _APPROACH_ARRIVE_PX)
             if not arrived:
                 return command
+            heading_error = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
+            if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+                log.debug("Claw short (%.1f cm) and off-heading (%.1f°) — turning %s",
+                          off, heading_error, direction.name)
+                self._driver.turn(pose, angle_to_rotations(heading_error), direction)
+                return direction
+            nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
+            log.debug("Claw short by %.1f cm — nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
+            self._driver.drive(pose, px_to_rotations(nudge_px))
+            return Command.FORWARD
 
         # Claw within collect range — check we're actually pointed at the ball.
         # Use the marker (rotation centre) for the bearing, not the claw tip.
@@ -443,7 +462,9 @@ class GolfBotController:
     # --- States: REVERSE_WHITE / REVERSE_ORANGE ------------------------------
 
     def _reverse_white(self, pose, world) -> Command:
-        return self._handle_reverse(world, scan_for=("white_balls", "ob"),
+        return self._handle_reverse(world,
+                                    scan_for=("white_balls", "white_wall_balls",
+                                              "white_corner_balls", "ob"),
                                     next_if_found=State.SEEK,
                                     next_if_empty=State.REVERSE_ORANGE)
 

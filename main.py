@@ -13,7 +13,6 @@ Each camera frame, in order:
 
 import time
 
-from controller.dijkstras import get_path
 import cv2
 
 from golfbot_logger import setup_logging, get_logger

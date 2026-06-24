@@ -64,8 +64,6 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
     All stages are always returned (far->close), regardless of the robot's
     current position. Each waypoint is clamped to stay inside the field boundary.
     """
-    angle_rad = math.radians(approach_angle_deg)
-
     waypoints = []
     for dist in stage_distances:                # already ordered far->close
         sp = staging_point(ball_px, approach_angle_deg, dist)
@@ -147,10 +145,6 @@ def get_price(start_px, target_px, *, cross_px=None, cross_size_px=None, start_a
         prev_px = wp
 
     return total_rotations
-
-
-# Alias for the exact name requested.
-getprice = get_price
 
 
 # --- Driver ------------------------------------------------------------------

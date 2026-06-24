@@ -28,6 +28,9 @@ class EV3ProtocolStrategyTests(unittest.TestCase):
             ev3_controller.release()
             ev3_controller.gate_open()
             ev3_controller.gate_close()
+            ev3_controller.reset_claw()
+            ev3_controller.close_claw()
+            ev3_controller.gate_rotate()
 
         self.assertEqual(
             sent_commands,
@@ -40,6 +43,9 @@ class EV3ProtocolStrategyTests(unittest.TestCase):
                 "RELEASE",
                 "GATE_OPEN",
                 "GATE_CLOSE",
+                "RESET_CLAW",
+                "CLOSE_CLAW",
+                "GATE_ROTATE",
             ],
         )
 

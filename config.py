@@ -58,6 +58,12 @@ GOAL_RELEASE_MARKER_PX = (
     GOAL_POSITION_PX[0] + MARKER_TO_CLAW_CM * WARPED_WIDTH / FIELD_WIDTH_CM,
     GOAL_POSITION_PX[1],
 )
+GOAL_RELEASE_X_TOL_PX = 8       # marker must be this close in x before opening gate
+GOAL_RELEASE_LANE_TOL_PX = 6    # stricter than collection: gate shots need a straight lane
+GOAL_RELEASE_HEADING_TOL_DEG = 2.0
+GOAL_RELEASE_MAX_DRIVE_PX = 40  # short final steps so camera can re-check before release
+GOAL_HEADING_MAX_CORRECTIONS = 4
+GOAL_HEADING_RECOVERY_REVERSE_ROTATIONS = 0.8
 
 COLLECT_RADIUS_CM = 5.0      # claw-tip -> ball distance (cm) at which we grab.
 COLLECT_RADIUS_PX = 8        # legacy pixel radius (kept for tooling/tests; the live

@@ -44,6 +44,10 @@ from controller.nearest import find_nearest
 from config import (
     GOAL_LINEUP_ARRIVE_PX, GOAL_LINEUP_PX, GOAL_POSITION_CM, GOAL_POSITION_PX,
     GOAL_RELEASE_MARKER_PX, WARPED_WIDTH, WARPED_HEIGHT,
+    GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_LANE_TOL_PX,
+    GOAL_RELEASE_HEADING_TOL_DEG, GOAL_RELEASE_MAX_DRIVE_PX,
+    GOAL_HEADING_MAX_CORRECTIONS, GOAL_HEADING_RECOVERY_REVERSE_ROTATIONS,
+    GOAL_LANE_MAX_REJECTIONS, GOAL_LANE_RECOVERY_REVERSE_ROTATIONS,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
     ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, MAX_DRIVE_PX, REVERSE_ROTATIONS,
     GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG,
@@ -109,6 +113,8 @@ class GolfBotController:
         self._corner_approach_angle = None   # heading held through a wall/corner approach (deg)
         self._goal_waypoints        = None   # None = not built yet; [] = staging done
         self._goal_approach_angle   = None   # wall-approach heading held into the goal (cm deg)
+        self._goal_heading_corrections = 0   # failed final heading corrections before backing out
+        self._goal_lane_rejections  = 0      # failed release-lane checks before backing out
         self._is_wall_ball          = False  # current target needs a staged approach
         self._has_reversed          = False  # already backed up this REVERSE cycle
         self._pose_ok               = True   # for logging pose-lost / reacquired once
@@ -528,14 +534,14 @@ class GolfBotController:
         return Command.STOP
 
     # --- State: DRIVE_GOAL ---------------------------------------------------
-    # The goal is treated exactly like a wall ball sitting at GOAL_POSITION_PX
-    # (30, 300): plan a staged wall approach, drive the staging point(s), align
+    # The goal is treated exactly like a wall ball sitting at GOAL_POSITION_PX:
+    # plan a staged wall approach, drive the staging point(s), align
     # to the wall-approach heading, drive straight in, then release.
 
     def _drive_to_goal(self, pose, world) -> Command:
         if self._goal_waypoints is None:        # first entry — build the wall-ball approach
-            # Classify (30, 300) and pick its wall-approach heading, same as any
-            # wall ball.  x=30 sits inside the left margin -> heading 180° (left).
+            # Classify the goal and pick its wall-approach heading, same as any
+            # wall ball. Its x sits inside the left margin -> heading 180° (left).
             zone, walls = classify_zone(GOAL_POSITION_PX, WALL_MARGIN_PX,
                                         WARPED_WIDTH, WARPED_HEIGHT)
             angle = wall_approach_angle(walls)
@@ -577,8 +583,10 @@ class GolfBotController:
                                      p1[0], p1[1], p2[0], p2[1])
                         else:
                             log.warning("Goal: cross blocks approach but no avoid route found — proceeding anyway")
-            log.info("Driving to goal (30,300) like a wall ball — %d staging point(s)",
+            log.info("Driving to goal %s like a wall ball — %d staging point(s)",
+                     GOAL_POSITION_PX,
                      len(self._goal_waypoints))
+            self._goal_heading_corrections = 0
 
         # Phase 1: work through the staging waypoints (same as AVOID).
         if self._goal_waypoints:
@@ -592,33 +600,61 @@ class GolfBotController:
 
         # Phase 2: align to the wall-approach heading before driving straight in
         # (same as _waypoint_reached does for a wall ball).
+        if self._goal_approach_angle is None:
+            self._goal_approach_angle = GOAL_HEADING_DEG
         heading_err = angle_error(pose.angle, self._goal_approach_angle)
         if abs(heading_err) > ALIGN_THRESHOLD_DEG:
+            if self._goal_heading_recovery_needed("approach", pose, heading_err):
+                return Command.BACKWARD
             direction = Command.RIGHT if heading_err > 0 else Command.LEFT
             self._driver.turn(pose, angle_to_rotations(heading_err, pos_px=pose.px), direction)
             return direction
+        self._goal_heading_corrections = 0
 
-        # Phase 3: drive straight in toward (30,300), exactly like a wall ball's
-        # final APPROACH (claw aimed at the goal coordinate).
-        claw = _claw_tip_cm(pose.pos, pose.angle)
-        off  = math.hypot(claw[0] - GOAL_POSITION_CM[0], claw[1] - GOAL_POSITION_CM[1])
-        if off > COLLECT_RADIUS_CM:
-            command, arrived = self._driver.drive_toward(pose, GOAL_POSITION_PX, _APPROACH_ARRIVE_PX)
-            if not arrived:
-                return command
-            heading_error = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
-            if abs(heading_error) > ALIGN_THRESHOLD_DEG:
-                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
-                self._driver.turn(pose, angle_to_rotations(heading_error, pos_px=pose.px), direction)
-                return direction
-            nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
-            self._driver.drive(pose, px_to_rotations(nudge_px, pos_px=pose.px))
+        # Phase 3: release is stricter than collection. Do not use the normal
+        # claw radius here: the gate needs the marker on the release lane and
+        # the robot facing straight into the goal, confirmed by camera pose.
+        heading_err = angle_error(pose.angle, GOAL_HEADING_DEG)
+        if abs(heading_err) > GOAL_RELEASE_HEADING_TOL_DEG:
+            if self._goal_heading_recovery_needed("release", pose, heading_err):
+                return Command.BACKWARD
+            direction = Command.RIGHT if heading_err > 0 else Command.LEFT
+            self._driver.turn(pose, angle_to_rotations(heading_err), direction)
+            return direction
+        self._goal_heading_corrections = 0
+
+        lane_err = pose.px[1] - GOAL_RELEASE_MARKER_PX[1]
+        if abs(lane_err) > GOAL_RELEASE_LANE_TOL_PX:
+            if self._goal_lane_recovery_needed(pose, lane_err):
+                return Command.BACKWARD
+            return Command.STOP
+        self._goal_lane_rejections = 0
+
+        release_dx = pose.px[0] - GOAL_RELEASE_MARKER_PX[0]
+        if release_dx > GOAL_RELEASE_X_TOL_PX:
+            drive_px = min(release_dx - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
+            log.debug("Goal final straight drive %.1f px toward release marker", drive_px)
+            self._driver.drive(pose, px_to_rotations(drive_px))
             return Command.FORWARD
 
-        # Claw at the goal coordinate — release.
-        log.info("At goal (30,300) — releasing")
+        if release_dx < -GOAL_RELEASE_X_TOL_PX:
+            reverse_px = min(abs(release_dx) - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
+            log.info(
+                "Goal release pose rejected — marker x %.1f overshot release x %.1f; backing up %.1f px",
+                pose.px[0], GOAL_RELEASE_MARKER_PX[0], reverse_px,
+            )
+            self._driver.reverse(px_to_rotations(reverse_px))
+            return Command.BACKWARD
+
+        # Marker is at the release coordinate and heading is confirmed — release.
+        log.info(
+            "At goal release pose — marker=(%.1f, %.1f), heading %.1f°; releasing",
+            pose.px[0], pose.px[1], pose.angle,
+        )
         self._goal_waypoints = None
         self._goal_approach_angle = None
+        self._goal_heading_corrections = 0
+        self._goal_lane_rejections = 0
         self._transition(State.RELEASE)
         return Command.STOP
 
@@ -644,6 +680,43 @@ class GolfBotController:
         self._route.clear()
         self._corner_waypoints      = []
         self._corner_approach_angle = None
+
+    def _goal_heading_recovery_needed(self, phase, pose, heading_err):
+        self._goal_heading_corrections += 1
+        if self._goal_heading_corrections <= GOAL_HEADING_MAX_CORRECTIONS:
+            return False
+
+        log.info(
+            "Goal %s heading still off after %d corrections — marker=(%.1f, %.1f), heading %.1f°, error %.1f°; reversing and rebuilding lineup",
+            phase, self._goal_heading_corrections, pose.px[0], pose.px[1],
+            pose.angle, heading_err,
+        )
+        self._driver.reverse(GOAL_HEADING_RECOVERY_REVERSE_ROTATIONS)
+        self._goal_waypoints = None
+        self._goal_approach_angle = None
+        self._goal_heading_corrections = 0
+        return True
+
+    def _goal_lane_recovery_needed(self, pose, lane_err):
+        self._goal_lane_rejections += 1
+        if self._goal_lane_rejections <= GOAL_LANE_MAX_REJECTIONS:
+            log.info(
+                "Goal release pose rejected — marker y %.1f is %.1f px off lane %.1f; rebuilding lineup",
+                pose.px[1], lane_err, GOAL_RELEASE_MARKER_PX[1],
+            )
+            self._goal_waypoints = None
+            return False
+
+        log.info(
+            "Goal release lane still off after %d rebuilds — marker=(%.1f, %.1f), lane error %.1f px; reversing and rebuilding from farther out",
+            self._goal_lane_rejections, pose.px[0], pose.px[1], lane_err,
+        )
+        self._driver.reverse(GOAL_LANE_RECOVERY_REVERSE_ROTATIONS)
+        self._goal_waypoints = None
+        self._goal_approach_angle = None
+        self._goal_heading_corrections = 0
+        self._goal_lane_rejections = 0
+        return True
 
     def _transition(self, new_state):
         log.debug("%s -> %s", self.state.name, new_state.name)

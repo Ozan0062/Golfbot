@@ -35,7 +35,7 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 # Both forms describe the SAME point (~30 px in from the wall) so the staged
 # drive-in (uses PX) and the release gate (uses CM) agree. Aiming the claw at the
 # wall plane (x=0) made the robot ram the wall and never satisfy the release.
-GOAL_POSITION_PX = (30, 300)   # claw target coordinate at the goal
+GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
 GOAL_POSITION_CM = (GOAL_POSITION_PX[0] * FIELD_WIDTH_CM / WARPED_WIDTH,
                     GOAL_POSITION_PX[1] * FIELD_HEIGHT_CM / WARPED_HEIGHT)
 # First navigate to this point on the goal lane, then face left and drive straight in.
@@ -58,6 +58,14 @@ GOAL_RELEASE_MARKER_PX = (
     GOAL_POSITION_PX[0] + MARKER_TO_CLAW_CM * WARPED_WIDTH / FIELD_WIDTH_CM,
     GOAL_POSITION_PX[1],
 )
+GOAL_RELEASE_X_TOL_PX = 8       # marker must be this close in x before opening gate
+GOAL_RELEASE_LANE_TOL_PX = 10   # strict enough for the gate, loose enough for camera jitter
+GOAL_RELEASE_HEADING_TOL_DEG = 2.0
+GOAL_RELEASE_MAX_DRIVE_PX = 40  # short final steps so camera can re-check before release
+GOAL_HEADING_MAX_CORRECTIONS = 4
+GOAL_HEADING_RECOVERY_REVERSE_ROTATIONS = 0.8
+GOAL_LANE_MAX_REJECTIONS = 2
+GOAL_LANE_RECOVERY_REVERSE_ROTATIONS = 0.8
 
 COLLECT_RADIUS_CM = 5.0      # claw-tip -> ball distance (cm) at which we grab.
 COLLECT_RADIUS_PX = 8        # legacy pixel radius (kept for tooling/tests; the live

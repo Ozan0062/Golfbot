@@ -42,7 +42,7 @@ from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from controller.dijkstras import get_path
 from config import (
-    GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
+    GOAL_POSITION_CM, GOAL_POSITION_PX, GOAL_STAGING_PX, WARPED_WIDTH, WARPED_HEIGHT,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
     ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, GOAL_ARRIVE_PX,
     GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
@@ -554,7 +554,7 @@ class GolfBotController:
 
                 full_route = []
                 current = pose.px
-                for dest in staging + [GOAL_POSITION_PX]:
+                for dest in staging + [GOAL_STAGING_PX, GOAL_POSITION_PX]:
                     seg_clear = gclear(current, dest)
                     log.debug("Goal segment (%.0f,%.0f)→(%.0f,%.0f): %s",
                               current[0], current[1], dest[0], dest[1],
@@ -595,7 +595,7 @@ class GolfBotController:
                 # Last entry is GOAL_POSITION_PX — keep it separate for final-approach logic.
                 self._goal_waypoints = full_route[:-1]
             else:
-                self._goal_waypoints = staging
+                self._goal_waypoints = staging + [GOAL_STAGING_PX]
             log.info("Driving to goal — %d waypoint(s)", len(self._goal_waypoints))
 
         # Work through the waypoints (turn + drive, like AVOID).

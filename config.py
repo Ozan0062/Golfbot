@@ -34,6 +34,7 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 # Goal: left wall, vertically centred.
 GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
 GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
+GOAL_STAGING_PX  = (40, 400)   # mandatory staging point 100 px right of goal
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive

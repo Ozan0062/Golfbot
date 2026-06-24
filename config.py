@@ -31,10 +31,13 @@ CAMERA_CENTER_PX = (446, 350)
 # Set to at least half the robot's widest dimension.
 FIELD_SAFETY_MARGIN_CM = 15.0
 
-# Goal: left wall, vertically centred.
-GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
-GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
-GOAL_STAGING_PX  = (40, 400)   # mandatory staging point 100 px right of goal
+# Goal: treated like a ball sitting just inside the left wall, vertically centred.
+# Both forms describe the SAME point (~30 px in from the wall) so the staged
+# drive-in (uses PX) and the release gate (uses CM) agree. Aiming the claw at the
+# wall plane (x=0) made the robot ram the wall and never satisfy the release.
+GOAL_POSITION_PX = (30, 300)   # claw target coordinate at the goal
+GOAL_POSITION_CM = (GOAL_POSITION_PX[0] * FIELD_WIDTH_CM / WARPED_WIDTH,
+                    GOAL_POSITION_PX[1] * FIELD_HEIGHT_CM / WARPED_HEIGHT)
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive
@@ -60,7 +63,7 @@ COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correcti
 GOAL_ARRIVE_PX = 100         # arrive radius (px) for the final goal approach
 GOAL_HEADING_DEG     = 180.0  # required robot heading when entering the goal
 GOAL_HEADING_TOL_DEG = 5.0    # tolerance either side of GOAL_HEADING_DEG
-REVERSE_ROTATIONS = 0.5      # how far to back up when no balls are visible
+REVERSE_ROTATIONS = 1      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
 
 CROSS_CLEARANCE_PX     = 100                       # stay at least this far from the cross centre
@@ -105,12 +108,12 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 64.98   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 31.11   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 29.70   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 64.40   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 31.75   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 28.98   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
-ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image
+ROBOT_FILTER_RADIUS_PX = 100   # pixels in the warped image
 
 # --- ArUco marker ------------------------------------------------------------
 ARUCO_DICT      = "DICT_4X4_50"

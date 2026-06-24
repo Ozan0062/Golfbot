@@ -42,10 +42,9 @@ from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from controller.nearest import find_nearest
 from config import (
-    GOAL_POSITION_CM, GOAL_POSITION_PX, GOAL_STAGING_PX, WARPED_WIDTH, WARPED_HEIGHT,
+    GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
-    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, GOAL_ARRIVE_PX,
-    GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
+    ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, REVERSE_ROTATIONS,
     CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
@@ -488,8 +487,8 @@ class GolfBotController:
         self._pose.invalidate()
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
-            log.debug("Wall ball — backing off")
-            self._driver.reverse(px_to_rotations(REVERSE_ROTATIONS))
+            log.info("Wall/corner ball — backing off")
+            self._driver.reverse(REVERSE_ROTATIONS)
             self._is_wall_ball = False
         
         robot.gate_rotate()       
@@ -526,103 +525,81 @@ class GolfBotController:
         return Command.STOP
 
     # --- State: DRIVE_GOAL ---------------------------------------------------
-    # Staged approach (like wall balls), then a straight final drive in (no turns).
+    # Treat the goal like a wall ball: stage the approach, then drive in with
+    # the same claw-tip logic as APPROACH. When the claw is within COLLECT_RADIUS_CM
+    # of GOAL_POSITION_CM, release instead of grabbing.
 
     def _drive_to_goal(self, pose, world) -> Command:
-        if self._goal_waypoints is None:        # first entry — plan the full route to goal
-            staging = corner_approach_waypoints(
+        if self._goal_waypoints is None:        # first entry — build staging route
+            self._goal_waypoints = corner_approach_waypoints(
                 pose.px, GOAL_POSITION_PX, GOAL_APPROACH_ANGLE_DEG,
                 CORNER_STAGE_DISTANCES_PX, WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
             )
-            # Insert cross avoid points at planning time using fixed cardinal waypoints.
+            # Cross avoidance: if the cross blocks the first staging point, prepend avoid points.
             cross_px = world.cross_px
-            if cross_px is not None:
-                avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
-                avoid_pts = list(avoid_map.values())
-                log.debug("Goal cross avoid points: right=(%.0f,%.0f) down=(%.0f,%.0f) left=(%.0f,%.0f) up=(%.0f,%.0f)",
-                          avoid_map[0][0], avoid_map[0][1],
-                          avoid_map[90][0], avoid_map[90][1],
-                          avoid_map[180][0], avoid_map[180][1],
-                          avoid_map[270][0], avoid_map[270][1])
+            if cross_px is not None and self._goal_waypoints:
+                staging_pt = self._goal_waypoints[0]
+                staging_clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
+                if not staging_clear:
+                    avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
+                    avoid_pts = list(avoid_map.values())
 
-                def gclear(a, b):
-                    ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
-                    return ok
+                    def _clr(a, b):
+                        ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
+                        return ok
 
-                def gdist(a, b):
-                    return math.hypot(a[0] - b[0], a[1] - b[1])
+                    single = sorted([pt for pt in avoid_pts if _clr(pose.px, pt) and _clr(pt, staging_pt)],
+                                    key=lambda p: math.hypot(p[0] - pose.px[0], p[1] - pose.px[1]))
+                    if single:
+                        self._goal_waypoints.insert(0, single[0])
+                        log.info("Goal: cross blocks staging — avoid via (%.0f,%.0f)", single[0][0], single[0][1])
+                    else:
+                        pairs = [(p1, p2) for p1 in avoid_pts for p2 in avoid_pts
+                                 if p1 is not p2 and _clr(pose.px, p1) and _clr(p1, p2) and _clr(p2, staging_pt)]
+                        if pairs:
+                            p1, p2 = min(pairs, key=lambda p: math.hypot(p[0][0]-pose.px[0], p[0][1]-pose.px[1]))
+                            self._goal_waypoints[:0] = [p1, p2]
+                            log.info("Goal: cross blocks staging — avoid via (%.0f,%.0f)→(%.0f,%.0f)",
+                                     p1[0], p1[1], p2[0], p2[1])
+                        else:
+                            log.warning("Goal: cross blocks staging but no avoid route found — proceeding anyway")
+            log.info("Driving to goal — %d staging waypoint(s)", len(self._goal_waypoints))
 
-                full_route = []
-                current = pose.px
-                for dest in staging + [GOAL_STAGING_PX, GOAL_POSITION_PX]:
-                    seg_clear = gclear(current, dest)
-                    log.debug("Goal segment (%.0f,%.0f)→(%.0f,%.0f): %s",
-                              current[0], current[1], dest[0], dest[1],
-                              "clear" if seg_clear else "BLOCKED")
-                    if not seg_clear:
-                        # Single avoid point
-                        inserted = False
-                        for pt in sorted(avoid_pts, key=lambda p: gdist(current, p)):
-                            r2pt   = gclear(current, pt)
-                            pt2dst = gclear(pt, dest)
-                            log.debug("  try single (%.0f,%.0f): robot→pt=%s pt→dest=%s",
-                                      pt[0], pt[1],
-                                      "OK" if r2pt else "BLOCKED",
-                                      "OK" if pt2dst else "BLOCKED")
-                            if r2pt and pt2dst:
-                                full_route.append(pt)
-                                log.info("Goal route: avoid point at (%.0f,%.0f)", pt[0], pt[1])
-                                inserted = True
-                                break
-                        if not inserted:
-                            log.debug("  No single-point solution — trying two-point")
-                            # Two avoid points
-                            for pt1 in avoid_pts:
-                                for pt2 in avoid_pts:
-                                    if pt1 is not pt2 and gclear(current, pt1) and gclear(pt1, pt2) and gclear(pt2, dest):
-                                        full_route += [pt1, pt2]
-                                        log.info("Goal route: two avoid points (%.0f,%.0f)→(%.0f,%.0f)",
-                                                 pt1[0], pt1[1], pt2[0], pt2[1])
-                                        inserted = True
-                                        break
-                                if inserted:
-                                    break
-                            if not inserted:
-                                log.warning("Goal route: no avoid solution for segment (%.0f,%.0f)→(%.0f,%.0f)",
-                                            current[0], current[1], dest[0], dest[1])
-                    full_route.append(dest)
-                    current = dest
-                # Last entry is GOAL_POSITION_PX — keep it separate for final-approach logic.
-                self._goal_waypoints = full_route[:-1]
-            else:
-                self._goal_waypoints = staging + [GOAL_STAGING_PX]
-            log.info("Driving to goal — %d waypoint(s)", len(self._goal_waypoints))
-
-        # Work through the waypoints (turn + drive, like AVOID).
+        # Phase 1: work through staging waypoints (same as AVOID).
         if self._goal_waypoints:
             command, arrived = self._driver.drive_toward(pose, self._goal_waypoints[0], AVOID_ARRIVE_PX)
             if arrived:
-                log.debug("Goal waypoint reached — %d left", len(self._goal_waypoints) - 1)
                 self._goal_waypoints.pop(0)
                 return Command.STOP
             return command
 
-        # Enforce heading before driving into the goal.
-        goal_heading_err = angle_error(pose.angle, GOAL_HEADING_DEG)
-        if abs(goal_heading_err) > GOAL_HEADING_TOL_DEG:
-            direction = Command.RIGHT if goal_heading_err > 0 else Command.LEFT
-            log.debug("Goal heading correct %.1f° %s", abs(goal_heading_err), direction.name)
-            self._driver.turn(pose, angle_to_rotations(goal_heading_err), direction)
+        # Phase 2: final approach — same logic as APPROACH, targeting GOAL_POSITION_CM.
+        claw = _claw_tip_cm(pose.pos, pose.angle)
+        off  = math.hypot(claw[0] - GOAL_POSITION_CM[0], claw[1] - GOAL_POSITION_CM[1])
+
+        if off > COLLECT_RADIUS_CM:
+            command, arrived = self._driver.drive_toward(pose, GOAL_POSITION_PX, _APPROACH_ARRIVE_PX)
+            if not arrived:
+                return command
+            heading_error = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
+            if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+                self._driver.turn(pose, angle_to_rotations(heading_error), direction)
+                return direction
+            nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
+            log.debug("Goal: claw short by %.1f cm — nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
+            self._driver.drive(pose, px_to_rotations(nudge_px))
+            return Command.FORWARD
+
+        # Claw within range — align heading then release.
+        heading_error = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
+        if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+            direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+            self._driver.turn(pose, angle_to_rotations(heading_error), direction)
             return direction
 
-        # All waypoints done — drive straight in to the goal coordinate.
-        command, arrived = self._driver.drive_toward(pose, GOAL_POSITION_PX, GOAL_ARRIVE_PX)
-        if not arrived:
-            log.debug("Goal final approach")
-            return command
-
-        log.info("Reached goal — releasing balls")
-        self._goal_waypoints = None             # reset in case of another run
+        log.info("Claw at goal (%.1f cm off) — releasing", off)
+        self._goal_waypoints = None
         self._transition(State.RELEASE)
         return Command.STOP
 

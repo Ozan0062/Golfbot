@@ -41,7 +41,7 @@ log = get_logger(__name__)
 # --------------------------------------------------------------------------
 CAL_DRIVE_ROT = 1.0    # rotations per drive test (shorter to avoid walls)
 CAL_TURN_ROT  = 1.5    # rotations per turn test (each direction)
-SETTLE_WAIT   = 0.6    # seconds to wait after a motor command before measuring
+SETTLE_WAIT   = 0.5    # seconds to wait after a motor command before measuring
 POSE_ATTEMPTS = 80     # max frames to try for a valid pose
 
 # --------------------------------------------------------------------------
@@ -109,7 +109,7 @@ def _show_overlay(stream, undist_maps, field_model, last_corners, text_lines, wa
 
 
 def _navigate_to(target_px, stream, undist_maps, field_model, aruco_detector,
-                 last_corners, arrive_radius=40):
+                 last_corners, arrive_radius=80):
     """
     Simple bang-bang controller to drive the robot to a target point.
     Returns the last_corners (for field detection continuity) or None on ESC.
@@ -135,7 +135,7 @@ def _navigate_to(target_px, stream, undist_maps, field_model, aruco_detector,
         desired   = angle_to_target(robot_cm, target_cm)
         err       = angle_error(angle, desired)
 
-        if abs(err) > 12:
+        if abs(err) > 18:
             # Turn to face the target (wider tolerance so it doesn't micro-adjust)
             rots = abs(err) / (calibration_angle_left.ratio if err < 0 else calibration_angle_right.ratio)
             rots = max(rots, 0.15)
@@ -144,7 +144,7 @@ def _navigate_to(target_px, stream, undist_maps, field_model, aruco_detector,
             time.sleep(SETTLE_WAIT)
         else:
             # Drive toward target (much faster/larger chunks)
-            drive_px = min(dist, 250)  
+            drive_px = min(dist, 350)  
             rots = drive_px / calibration_pixels.ratio
             rots = max(rots, 0.15)
             robot.drive(rots)

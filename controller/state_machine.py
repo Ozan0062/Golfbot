@@ -54,7 +54,7 @@ from config import (
     CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
-    MARKER_TO_CLAW_CM, CROSS_RADIUS_PX,
+    MARKER_TO_CLAW_CM, CROSS_RADIUS_PX, ROBOT_FILTER_RADIUS_PX,
 )
 from golfbot_logger import get_logger
 from vision.tracker import WorldState
@@ -117,6 +117,7 @@ class GolfBotController:
         self._goal_lane_rejections  = 0      # failed release-lane checks before backing out
         self._is_wall_ball          = False  # current target needs a staged approach
         self._has_reversed          = False  # already backed up this REVERSE cycle
+        self._delivered             = False  # already dumped a load at the goal (post-release rescan)
         self._pose_ok               = True   # for logging pose-lost / reacquired once
 
         log.info(
@@ -164,6 +165,20 @@ class GolfBotController:
         target = self._locked_target
         log.info("Target locked — ball at (%.0f, %.0f) px", target.px[0], target.px[1])
 
+        # Robot is practically on top of this target — within ROBOT_FILTER_RADIUS_PX/5.
+        # Too close to be a real, collectable ball (likely a phantom or an
+        # already-handled detection sitting near the robot), so drop it and pick
+        # the next target on the following tick.
+        if target.px is not None:
+            skip_radius = ROBOT_FILTER_RADIUS_PX / 5 #2 pixels, go next
+            dist_to_target = math.hypot(target.px[0] - pose.px[0], target.px[1] - pose.px[1])
+            if dist_to_target < skip_radius:
+                log.info("Target only %.0f px away (< %.0f) — skipping to the next target",
+                         dist_to_target, skip_radius)
+                self._reset_targeting()
+                self._locked_target = None
+                return Command.STOP
+
         # 1. Ball sitting in/at the cross?  Collect it like a corner ball
         #    (staged diagonal approach).  Must come before the dodge check below,
         #    otherwise the cross would read as "blocking" its own ball forever.
@@ -206,7 +221,8 @@ class GolfBotController:
         # Use the 4 fixed avoid points (midpoint between cross and each wall).
         avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
         avoid_pts = list(avoid_map.values())
-        label_map = {0: "right", 90: "down", 180: "left", 270: "up"}
+        label_map = {0: "right", 45: "down-right", 90: "down", 135: "down-left",
+                     180: "left", 225: "up-left", 270: "up", 315: "up-right"}
         log.debug("Avoid points: %s",
                   "  ".join(f"{label_map[k]}=(%.0f,%.0f)" % v for k, v in avoid_map.items()))
 
@@ -490,6 +506,7 @@ class GolfBotController:
             claw[0], claw[1], target.cm[0], target.cm[1], dx, dy, deg_off,
         )
         log.info("Collected ball")
+        self._delivered = False   # new load on board — deliver it before finishing
         self._locked_target = None
         self._route.advance()
         robot.close_claw()
@@ -516,9 +533,13 @@ class GolfBotController:
                                     next_if_empty=State.REVERSE_ORANGE)
 
     def _reverse_orange(self, pose, world) -> Command:
+        # After a delivery, an empty rescan means no balls are left anywhere —
+        # the mission is done. Before the first delivery, an empty rescan means
+        # the claw is full and it's time to head for the goal.
+        next_if_empty = State.DONE if self._delivered else State.DRIVE_GOAL
         return self._handle_reverse(world, scan_for=("ob",),
                                     next_if_found=State.SEEK,
-                                    next_if_empty=State.DRIVE_GOAL)
+                                    next_if_empty=next_if_empty)
 
     def _handle_reverse(self, world, scan_for, next_if_found, next_if_empty) -> Command:
         """Back up once, then on the next tick check whether anything appeared."""
@@ -665,9 +686,14 @@ class GolfBotController:
                  pose.pos[0], pose.pos[1], pose.angle)
         robot.gate_open()
         time.sleep(3)
-        robot.gate_close()
-        log.info("Balls released — mission complete")
-        self._transition(State.DONE)
+        robot.gate_open()
+        # Don't finish yet — back up and rescan in case new balls have appeared
+        # since we committed to the goal. REVERSE_WHITE -> REVERSE_ORANGE will
+        # route to SEEK if anything is found, or to DONE if the field is empty.
+        self._delivered = True
+        self._has_reversed = False
+        log.info("Balls released — backing up to rescan for new balls")
+        self._transition(State.REVERSE_WHITE)
         return Command.RELEASE
 
     def _done(self, pose, world) -> Command:

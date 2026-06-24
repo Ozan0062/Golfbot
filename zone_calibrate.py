@@ -159,6 +159,40 @@ def _navigate_to(target_px, stream, undist_maps, field_model, aruco_detector,
     return last_corners
 
 
+def _face_point(face_px, stream, undist_maps, field_model, aruco_detector,
+                last_corners, tol_deg=12, max_steps=8):
+    """
+    Turn the robot in place until it faces *face_px* (no translation).
+
+    Used after navigation so the calibration drive/turn tests run with the robot
+    pointing into open field instead of nosed into the corner it just drove to.
+    Returns updated last_corners, or None on ESC.
+    """
+    from controller.navigation import angle_to_target, angle_error, px_to_cm
+    from controller.calibration_tracker import calibration_angle_left, calibration_angle_right
+
+    for _ in range(max_steps):
+        center, angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
+        if center is None:
+            time.sleep(0.2)
+            continue
+
+        desired = angle_to_target(px_to_cm(center), px_to_cm(face_px))
+        err     = angle_error(angle, desired)
+        if abs(err) <= tol_deg:
+            return last_corners
+
+        rots = abs(err) / (calibration_angle_left.ratio if err < 0 else calibration_angle_right.ratio)
+        rots = max(rots, 0.15)
+        robot.turn(rots, "LEFT" if err < 0 else "RIGHT")
+        time.sleep(SETTLE_WAIT)
+
+        if _show_overlay(stream, undist_maps, field_model, last_corners,
+                         [f"Orienting inward  heading_err={err:.1f} deg"]):
+            return None
+    return last_corners
+
+
 def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector, last_corners):
     """
     Run one drive + turn-left + turn-right calibration sequence in the current zone.
@@ -166,6 +200,14 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
     """
     zone_name = {0: "TL", 1: "TR", 2: "BL", 3: "BR"}[zone_id]
     log.info("=== Calibrating zone %d (%s) ===", zone_id, zone_name)
+
+    # Face the field centre first so the drive/turn tests run into open field,
+    # not into the corner the robot just navigated to.
+    log.info("Zone %d: orienting toward field centre %s before tests", zone_id, ZONE_CENTER_PX)
+    last_corners = _face_point(ZONE_CENTER_PX, stream, undist_maps, field_model,
+                               aruco_detector, last_corners)
+    if last_corners is None:
+        return None
 
     # --- Drive test ---
     log.info("Zone %d: Drive forward %.1f rot...", zone_id, CAL_DRIVE_ROT)

@@ -268,14 +268,22 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
 
 def cross_avoid_points(cross_px, field_width, field_height):
     """
-    Four fixed navigation waypoints around the cross: one in each cardinal
-    direction, placed at the midpoint between the cross centre and the wall.
-    Keyed by heading angle (0=right, 90=down, 180=left, 270=up).
+    Eight fixed navigation waypoints around the cross: four cardinal and four
+    diagonal. Each is placed at the midpoint between the cross centre and the
+    corresponding wall (cardinal) or field corner (diagonal). The diagonals let
+    the dodge planner route around a corner when the robot and target sit in
+    diagonally-opposite quadrants - a case the 4 cardinal points alone can't
+    express. Keyed by heading angle (0=right, 45=down-right, 90=down,
+    135=down-left, 180=left, 225=up-left, 270=up, 315=up-right).
     """
     cx, cy = cross_px
     return {
-          0: ((cx + field_width)  / 2, cy),          # right
-         90: (cx, (cy + field_height) / 2),           # down
-        180: (cx / 2,             cy),                # left
-        270: (cx, cy / 2),                            # up
+          0: ((cx + field_width)  / 2, cy),                       # right
+         45: ((cx + field_width)  / 2, (cy + field_height) / 2),  # down-right
+         90: (cx, (cy + field_height) / 2),                       # down
+        135: (cx / 2,             (cy + field_height) / 2),       # down-left
+        180: (cx / 2,             cy),                            # left
+        225: (cx / 2,             cy / 2),                        # up-left
+        270: (cx, cy / 2),                                        # up
+        315: ((cx + field_width)  / 2, cy / 2),                   # up-right
     }

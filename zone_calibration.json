@@ -5,73 +5,37 @@
   ],
   "zones": {
     "0": {
-<<<<<<< HEAD
-      "px_per_rot": 60.9886,
-      "deg_per_rot_left": 30.2956,
-      "deg_per_rot_right": 28.3498,
-      "samples_drive": 4,
-      "samples_turn_left": 4,
-      "samples_turn_right": 4
-    },
-    "1": {
-      "px_per_rot": 50.0115,
-      "deg_per_rot_left": 30.498,
-      "deg_per_rot_right": 28.9188,
-      "samples_drive": 4,
-      "samples_turn_left": 4,
-      "samples_turn_right": 4
-    },
-    "2": {
-      "px_per_rot": 47.6557,
-      "deg_per_rot_left": 30.6921,
-      "deg_per_rot_right": 29.336,
-      "samples_drive": 4,
-      "samples_turn_left": 4,
-      "samples_turn_right": 4
-    },
-    "3": {
-      "px_per_rot": 62.4033,
-      "deg_per_rot_left": 31.8081,
-      "deg_per_rot_right": 30.8691,
-      "samples_drive": 4,
-      "samples_turn_left": 4,
-      "samples_turn_right": 4
-    }
-  },
-  "last_updated": "2026-06-24T15:57:20.487071"
-=======
-      "px_per_rot": 47.3279,
-      "deg_per_rot_left": 30.7676,
-      "deg_per_rot_right": 29.1433,
+      "px_per_rot": 65.0652,
+      "deg_per_rot_left": 30.5382,
+      "deg_per_rot_right": 31.322,
       "samples_drive": 5,
       "samples_turn_left": 5,
       "samples_turn_right": 5
     },
     "1": {
-      "px_per_rot": 40.699,
-      "deg_per_rot_left": 30.3645,
-      "deg_per_rot_right": 29.4145,
+      "px_per_rot": 64.8512,
+      "deg_per_rot_left": 32.2976,
+      "deg_per_rot_right": 33.0877,
       "samples_drive": 5,
       "samples_turn_left": 5,
       "samples_turn_right": 5
     },
     "2": {
-      "px_per_rot": 41.7616,
-      "deg_per_rot_left": 30.1317,
-      "deg_per_rot_right": 28.142,
+      "px_per_rot": 64.4353,
+      "deg_per_rot_left": 30.7128,
+      "deg_per_rot_right": 30.2018,
       "samples_drive": 5,
       "samples_turn_left": 5,
       "samples_turn_right": 5
     },
     "3": {
-      "px_per_rot": 43.3837,
-      "deg_per_rot_left": 29.377,
-      "deg_per_rot_right": 30.3434,
+      "px_per_rot": 65.5435,
+      "deg_per_rot_left": 30.3075,
+      "deg_per_rot_right": 30.4754,
       "samples_drive": 5,
       "samples_turn_left": 5,
       "samples_turn_right": 5
     }
   },
-  "last_updated": "2026-06-24T15:26:26.780884"
->>>>>>> origin/brownie
+  "last_updated": "2026-06-24T17:06:06.525762"
 }

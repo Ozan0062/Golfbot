@@ -8,7 +8,7 @@ CAMERA_WIDTH  = 640
 CAMERA_HEIGHT = 480
 
 # --- Field -------------------------------------------------------------------
-FIELD_WIDTH_CM  = 169.0
+FIELD_WIDTH_CM  = 170.0
 FIELD_HEIGHT_CM = 124.5
 
 # Warped (top-down) image dimensions. NOTE: 900x600 is 3:2, which does NOT match
@@ -47,7 +47,7 @@ ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" an
 MIN_TURN_ROTATIONS  = 0.25   # ignore turns smaller than this
 TURN_DAMPING        = 0.6    # scale turns down to avoid oscillation when close
 
-MARKER_TO_CLAW_CM = 16.8     # HORIZONTAL (floor-plane) offset from the ArUco marker
+MARKER_TO_CLAW_CM = 17         # HORIZONTAL (floor-plane) offset from the ArUco marker
                              # centre to the claw tip, in cm. Measure floor-to-floor
                              # (point under the marker -> point under the claw tip),
                              # NOT the 3D slant from the 19.8 cm marker to the 7.5 cm tip.
@@ -67,7 +67,7 @@ GOAL_HEADING_RECOVERY_REVERSE_ROTATIONS = 0.8
 GOAL_LANE_MAX_REJECTIONS = 2
 GOAL_LANE_RECOVERY_REVERSE_ROTATIONS = 0.8
 
-COLLECT_RADIUS_CM = 5.0      # claw-tip -> ball distance (cm) at which we grab.
+COLLECT_RADIUS_CM = 2.0      # claw-tip -> ball distance (cm) at which we grab.
 COLLECT_RADIUS_PX = 8        # legacy pixel radius (kept for tooling/tests; the live
                              # collect check is COLLECT_RADIUS_CM, measured in cm).
 COLLECT_ANGLE_DEG = 5.0      # max angular offset (deg) in x AND y, measured from the
@@ -95,7 +95,7 @@ CROSS_DIAMETER_CM       = 20.0   # physical size of the centre cross
 CROSS_RADIUS_PX         = CROSS_DIAMETER_CM / 2 * max(
     WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
 
-WALL_MARGIN_PX      = 75    # a ball this close to a wall needs a staged approach
+WALL_MARGIN_PX      = 100    # a ball this close to a wall needs a staged approach
 STAGING_DISTANCE_PX = 150    # standoff for the final straight-in approach.
                              # Must be >= WALL_MARGIN_PX / cos(45deg) ~= 170 so corner
                              # staging points land outside the margin on both axes.

@@ -143,7 +143,7 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         self.assertIs(command, Command.STOP)
         self.assertIs(controller.state, State.RELEASE)
 
-    def test_release_opens_and_closes_gate_then_marks_done(self):
+    def test_release_opens_and_closes_gate_then_rescans(self):
         calls = []
         controller = GolfBotController()
         controller.state = State.RELEASE
@@ -156,6 +156,20 @@ class StateMachineReverseGoalTests(unittest.TestCase):
 
         self.assertIs(command, Command.RELEASE)
         self.assertEqual(calls, ["open", "close"])
+        self.assertIs(controller.state, State.REVERSE_WHITE)
+        self.assertTrue(controller._delivered)
+        self.assertFalse(controller._has_reversed)
+
+    def test_reverse_orange_finishes_when_empty_after_a_delivery(self):
+        controller = GolfBotController()
+        controller.state = State.REVERSE_ORANGE
+        controller._has_reversed = True
+        controller._delivered = True
+        world = world_state(robot=(20.0, 60.0), robot_px=(100, 300), robot_angle=0.0, ob=None)
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
         self.assertIs(controller.state, State.DONE)
 
     def test_done_state_returns_stop(self):

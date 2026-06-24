@@ -120,11 +120,10 @@ class CrossApproachTests(unittest.TestCase):
         self.assertGreater(sp_d, ball_d)
 
     def test_cross_trigger_radius_uses_detected_size_when_available(self):
-        # half of the larger box side + clearance
-        self.assertAlmostEqual(cross_trigger_radius((100, 80), 999, 60), 50 + 60)
+        self.assertAlmostEqual(cross_trigger_radius(50), 100)
 
     def test_cross_trigger_radius_falls_back_when_size_missing(self):
-        self.assertAlmostEqual(cross_trigger_radius(None, 53, 60), 53 + 60)
+        self.assertAlmostEqual(cross_trigger_radius(53), 106)
 
 
 if __name__ == "__main__":

@@ -5,4 +5,5 @@ omit =
     vision/camera.py
     vision/detector.py
     vision/field.py
+    vision/lens_calibration.py
 

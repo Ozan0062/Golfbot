@@ -18,8 +18,8 @@ WARPED_WIDTH  = 900
 WARPED_HEIGHT = 600
 
 # --- Parallax / height correction (cm) ---------------------------------------
-CAMERA_HEIGHT_CM       = 178.0
-ROBOT_MARKER_HEIGHT_CM = 19.8    # ArUco marker height above the field
+CAMERA_HEIGHT_CM       = 176.5
+ROBOT_MARKER_HEIGHT_CM = 20.6    # ArUco marker height above the field
 
 # The point on the field the camera hangs directly above, in warped pixels.
 # Scaled from (312, 303) in the old 640x480 view to 900x600.
@@ -34,6 +34,7 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 # Goal: left wall, vertically centred.
 GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
 GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
+GOAL_STAGING_PX  = (40, 400)   # mandatory staging point 100 px right of goal
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive
@@ -59,13 +60,12 @@ COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correcti
 GOAL_ARRIVE_PX = 100         # arrive radius (px) for the final goal approach
 GOAL_HEADING_DEG     = 180.0  # required robot heading when entering the goal
 GOAL_HEADING_TOL_DEG = 5.0    # tolerance either side of GOAL_HEADING_DEG
-REVERSE_ROTATIONS = 1.0      # how far to back up when no balls are visible
+REVERSE_ROTATIONS = 0.5      # how far to back up when no balls are visible
 MAX_DRIVE_PX      = 80       # cap on drive distance per cycle, so we re-check often
 
-CROSS_CLEARANCE_PX     = 70                       # stay at least this far from the cross centre
+CROSS_CLEARANCE_PX     = 100                       # stay at least this far from the cross centre
                                                   # cross is 10 cm radius ≈ 53 px + ~17 px robot buffer
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
-CROSS_RADIUS_PX        = 50                       # default cross radius when vision doesn't provide a size
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
 # --- Cross pickup (ball sitting in/at the centre cross) ----------------------
@@ -105,9 +105,9 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 63.54   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 27.61   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 34.12   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 64.98   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 31.11   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 29.70   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
 ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image

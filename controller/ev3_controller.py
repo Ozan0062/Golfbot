@@ -110,3 +110,11 @@ def gate_close():
 def reset_claw():
     """Reset the claw to its default position. Blocking."""
     _send_recv("RESET_CLAW")
+    
+def close_claw():
+    """Close the claw. Blocking."""
+    _send_recv("CLOSE_CLAW")
+    
+def gate_rotate():
+    """Rotate the gate 360 degrees. Blocking."""
+    _send_recv("GATE_ROTATE")

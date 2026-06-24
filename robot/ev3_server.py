@@ -92,6 +92,14 @@ while True:
             gate.rotate(0.5, speed=100)
             conn.sendall(b"OK")
             
+        elif cmd == "GATE_ROTATE":
+            gate.rotate(1.0, speed=100)   # one full 360° rotation
+            conn.sendall(b"OK")
+
         elif cmd == "RESET_CLAW":
             claw.reset_claw()
+            conn.sendall(b"OK")
+            
+        elif cmd == "CLOSE_CLAW":
+            claw.close_claw()
             conn.sendall(b"OK")

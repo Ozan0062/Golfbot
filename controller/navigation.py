@@ -143,7 +143,8 @@ def cross_approach_angle(ball_px, cross_px):
     dy = ball_px[1] - cross_px[1]
     raw = math.degrees(math.atan2(dy, dx))   # direction cross→ball
     approach = raw + 180.0                   # robot faces the opposite way
-    snapped  = round(approach / 45.0) * 45.0
+    # Snap only to the diagonals: 45, 135, -45, -135 (gaps between cross legs)
+    snapped = round((approach - 45.0) / 90.0) * 90.0 + 45.0
     # Normalise to (-180, 180]
     while snapped >  180.0: snapped -= 360.0
     while snapped <= -180.0: snapped += 360.0
@@ -235,8 +236,12 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
     t = (obstacle_px[0] - robot_px[0]) * ux + (obstacle_px[1] - robot_px[1]) * uy
     proj = (robot_px[0] + t * ux, robot_px[1] + t * uy)
 
-    wp_left  = (proj[0] + nx * clearance_px, proj[1] + ny * clearance_px)
-    wp_right = (proj[0] - nx * clearance_px, proj[1] - ny * clearance_px)
+    # Pull the waypoint back along the path so the diagonal approach clears the obstacle
+    t_pullback = max(0, t - clearance_px)
+    proj_pullback = (robot_px[0] + t_pullback * ux, robot_px[1] + t_pullback * uy)
+
+    wp_left  = (proj_pullback[0] + nx * clearance_px, proj_pullback[1] + ny * clearance_px)
+    wp_right = (proj_pullback[0] - nx * clearance_px, proj_pullback[1] - ny * clearance_px)
 
     def in_bounds(wp):
         return (clearance_px <= wp[0] <= field_width  - clearance_px and
@@ -274,48 +279,3 @@ def cross_avoid_points(cross_px, field_width, field_height):
         180: (cx / 2,             cy),                # left
         270: (cx, cy / 2),                            # up
     }
-
-def cross_bypass_waypoint(robot_px, target_px, cross_px, clearance_px,
-                          field_width, field_height):
-    """
-    Compute a single waypoint that routes around a cross-shaped obstacle.
-
-    Instead of offsetting perpendicular to the path (which lands on a cross arm),
-    this places the waypoint at one of the four 45-degree diagonal positions from
-    the cross centre — between the arms.  The quadrant that minimises the total
-    detour (robot → waypoint → target) is chosen.
-
-    clearance_px should be larger than the cross arm half-length so the waypoint
-    clears both arms.
-    """
-    cx, cy = cross_px
-    d = clearance_px
-
-    quadrants = [
-        (cx - d, cy - d),  # upper-left
-        (cx + d, cy - d),  # upper-right
-        (cx - d, cy + d),  # lower-left
-        (cx + d, cy + d),  # lower-right
-    ]
-
-    margin = d
-    def in_bounds(wp):
-        return (margin <= wp[0] <= field_width  - margin and
-                margin <= wp[1] <= field_height - margin)
-
-    def clamp(wp):
-        return (max(margin, min(wp[0], field_width  - margin)),
-                max(margin, min(wp[1], field_height - margin)))
-
-    # Pick the quadrant that minimises total path length robot→wp→target.
-    def cost(q):
-        return (math.hypot(q[0] - robot_px[0],  q[1] - robot_px[1]) +
-                math.hypot(q[0] - target_px[0], q[1] - target_px[1]))
-
-    candidates = sorted(quadrants, key=cost)
-    for wp in candidates:
-        if in_bounds(wp):
-            return clamp(wp)
-    return clamp(candidates[0])
-
-

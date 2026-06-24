@@ -42,12 +42,12 @@ from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from controller.dijkstras import get_path
 from config import (
-    GOAL_POSITION_CM, GOAL_POSITION_PX, WARPED_WIDTH, WARPED_HEIGHT,
+    GOAL_POSITION_CM, GOAL_POSITION_PX, GOAL_STAGING_PX, WARPED_WIDTH, WARPED_HEIGHT,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
     ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, GOAL_ARRIVE_PX,
     GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG, REVERSE_ROTATIONS,
-    MAX_DRIVE_PX, CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
-    WALL_MARGIN_PX, STAGING_DISTANCE_PX, CORNER_STAGE_DISTANCES_PX,
+    CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
+    WALL_MARGIN_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
     MARKER_TO_CLAW_CM, CROSS_RADIUS_PX,
 )
@@ -55,12 +55,15 @@ from golfbot_logger import get_logger
 from vision.tracker import WorldState
 
 
+# Smaller of the two anisotropic px/cm scales. Converting a claw-frame cm distance
+# with the smaller scale gives a conservative pixel distance, so the claw always
+# reaches the ball (never stalls short) whatever the heading.
+_PX_PER_CM_MIN = min(WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
+
 # On the final drive-in, stop the marker about one arm-length short of the ball so
-# the claw lands on it. Use the smaller of the two px/cm scales so the claw always
-# reaches the ball (never stalls short) whatever the heading; the precise grab is
-# gated on the cm claw-to-ball distance, not on this coarse pixel arrival.
-_APPROACH_ARRIVE_PX = MARKER_TO_CLAW_CM * min(WARPED_WIDTH / FIELD_WIDTH_CM,
-                                              WARPED_HEIGHT / FIELD_HEIGHT_CM)
+# the claw lands on it. The precise grab is gated on the cm claw-to-ball distance
+# (COLLECT_RADIUS_CM), not on this coarse pixel arrival.
+_APPROACH_ARRIVE_PX = MARKER_TO_CLAW_CM * _PX_PER_CM_MIN
 
 
 def _claw_tip_cm(robot_pos_cm, robot_angle_deg):
@@ -138,9 +141,9 @@ class GolfBotController:
 
     def _seek(self, pose, world) -> Command:
         """Pick the closest remaining ball and decide how to approach it."""
-        path = get_path(world)
         
         if self._locked_target is None:
+            path = get_path(world)
             self._locked_target = self._route.get_target_dijkstras(path, pose.px, world)
         
         if self._locked_target is None:
@@ -313,7 +316,8 @@ class GolfBotController:
         log.debug("staging path: %s",
                   "  ->  ".join(f"({w[0]:.0f},{w[1]:.0f})" for w in waypoints))
 
-        # If the cross blocks the path to the first staging point, prepend a dodge.
+        # If the cross blocks the path to the first staging point, route around it
+        # using the 4 fixed cardinal avoid points (same logic as _cross_blocks_path).
         cross_px = world.cross_px if world is not None else None
         if cross_px is not None:
             staging_pt = self._avoid_target
@@ -322,13 +326,50 @@ class GolfBotController:
                       pose.px[0], pose.px[1], staging_pt[0], staging_pt[1],
                       "clear" if staging_clear else "BLOCKED")
             if not staging_clear:
-                dodge = obstacle_waypoint(pose.px, staging_pt, cross_px,
-                                          AVOID_WAYPOINT_DIST_PX, WARPED_WIDTH, WARPED_HEIGHT)
-                if dodge is not None:
+                avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
+                avoid_pts = list(avoid_map.values())
+
+                def _clr(a, b):
+                    ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
+                    return ok
+
+                def _dst(a, b):
+                    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+                # Try single avoid point: robot → pt → staging.
+                route = None
+                single = [pt for pt in avoid_pts if _clr(pt, staging_pt)]
+                single.sort(key=lambda pt: _dst(pose.px, pt))
+                for pt in single:
+                    if _clr(pose.px, pt):
+                        route = [pt]
+                        log.info("Cross blocks staging — single avoid point (%.0f,%.0f) → staging=(%.0f,%.0f)",
+                                 pt[0], pt[1], staging_pt[0], staging_pt[1])
+                        break
+
+                # Try two avoid points: robot → pt1 → pt2 → staging.
+                if route is None:
+                    pairs = [
+                        (pt1, pt2)
+                        for pt1 in avoid_pts for pt2 in avoid_pts
+                        if pt1 is not pt2
+                        and _clr(pose.px, pt1)
+                        and _clr(pt1, pt2)
+                        and _clr(pt2, staging_pt)
+                    ]
+                    if pairs:
+                        pt1, pt2 = min(pairs, key=lambda p: _dst(pose.px, p[0]) + _dst(p[0], p[1]))
+                        route = [pt1, pt2]
+                        log.info("Cross blocks staging — two avoid points (%.0f,%.0f)→(%.0f,%.0f) → staging=(%.0f,%.0f)",
+                                 pt1[0], pt1[1], pt2[0], pt2[1], staging_pt[0], staging_pt[1])
+
+                if route is not None:
                     self._corner_waypoints.insert(0, staging_pt)
-                    self._avoid_target = dodge
-                    log.info("Cross blocks path to staging — dodge inserted at (%.0f,%.0f), staging=(%.0f,%.0f)",
-                             dodge[0], dodge[1], staging_pt[0], staging_pt[1])
+                    self._avoid_target = route[0]
+                    for extra in reversed(route[1:]):
+                        self._corner_waypoints.insert(0, extra)
+                else:
+                    log.warning("Cross blocks staging but no avoid route found — proceeding anyway")
 
         return State.AVOID
 
@@ -389,16 +430,32 @@ class GolfBotController:
             self._transition(State.SEEK)
             return Command.STOP
 
-        # Use the claw tip (not the marker) as the reference for arrival.
-        # In floor-projected space the scale is uniform so projecting by
-        # MARKER_TO_CLAW_PX along the corrected heading gives the true claw position.
+        # Arrival is gated on the claw tip (not the marker), measured in cm on the
+        # floor plane where the scale is uniform: project MARKER_TO_CLAW_CM forward
+        # of the height-corrected marker along the heading.
         claw = _claw_tip_cm(pose.pos, pose.angle)
         off  = math.hypot(claw[0] - target.cm[0], claw[1] - target.cm[1])
 
+        # Not within collect range yet: drive the marker in (it stops ~one arm-length
+        # short so the claw lands on the ball). If the marker reached that stop point
+        # but the claw is still short, re-align when the heading swung it off,
+        # otherwise nudge straight in by the shortfall. We never grab until the claw
+        # is actually within COLLECT_RADIUS_CM.
         if off > COLLECT_RADIUS_CM:
             command, arrived = self._driver.drive_toward(pose, target.px, _APPROACH_ARRIVE_PX)
             if not arrived:
                 return command
+            heading_error = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
+            if abs(heading_error) > ALIGN_THRESHOLD_DEG:
+                direction = Command.RIGHT if heading_error > 0 else Command.LEFT
+                log.debug("Claw short (%.1f cm) and off-heading (%.1f°) — turning %s",
+                          off, heading_error, direction.name)
+                self._driver.turn(pose, angle_to_rotations(heading_error), direction)
+                return direction
+            nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
+            log.debug("Claw short by %.1f cm — nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
+            self._driver.drive(pose, px_to_rotations(nudge_px))
+            return Command.FORWARD
 
         # Claw within collect range — check we're actually pointed at the ball.
         # Use the marker (rotation centre) for the bearing, not the claw tip.
@@ -427,14 +484,15 @@ class GolfBotController:
         log.info("Collected ball")
         self._locked_target = None
         self._route.advance()
-        robot.collect()
+        robot.close_claw()
         self._pose.invalidate()
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
             log.debug("Wall ball — backing off")
-            self._driver.reverse(px_to_rotations(STAGING_DISTANCE_PX/2))
+            self._driver.reverse(px_to_rotations(REVERSE_ROTATIONS))
             self._is_wall_ball = False
-            
+        
+        robot.gate_rotate()       
         robot.reset_claw()
 
         self._transition(State.SEEK)
@@ -443,7 +501,9 @@ class GolfBotController:
     # --- States: REVERSE_WHITE / REVERSE_ORANGE ------------------------------
 
     def _reverse_white(self, pose, world) -> Command:
-        return self._handle_reverse(world, scan_for=("white_balls", "ob"),
+        return self._handle_reverse(world,
+                                    scan_for=("white_balls", "white_wall_balls",
+                                              "white_corner_balls", "ob"),
                                     next_if_found=State.SEEK,
                                     next_if_empty=State.REVERSE_ORANGE)
 
@@ -494,7 +554,7 @@ class GolfBotController:
 
                 full_route = []
                 current = pose.px
-                for dest in staging + [GOAL_POSITION_PX]:
+                for dest in staging + [GOAL_STAGING_PX, GOAL_POSITION_PX]:
                     seg_clear = gclear(current, dest)
                     log.debug("Goal segment (%.0f,%.0f)→(%.0f,%.0f): %s",
                               current[0], current[1], dest[0], dest[1],
@@ -535,7 +595,7 @@ class GolfBotController:
                 # Last entry is GOAL_POSITION_PX — keep it separate for final-approach logic.
                 self._goal_waypoints = full_route[:-1]
             else:
-                self._goal_waypoints = staging
+                self._goal_waypoints = staging + [GOAL_STAGING_PX]
             log.info("Driving to goal — %d waypoint(s)", len(self._goal_waypoints))
 
         # Work through the waypoints (turn + drive, like AVOID).
@@ -569,6 +629,8 @@ class GolfBotController:
     # --- State: RELEASE / DONE -----------------------------------------------
 
     def _release_balls(self, pose, world) -> Command:
+        log.info("Releasing — robot at (%.1f, %.1f) cm, heading %.1f°",
+                 pose.pos[0], pose.pos[1], pose.angle)
         robot.gate_open()
         time.sleep(3)
         robot.gate_close()

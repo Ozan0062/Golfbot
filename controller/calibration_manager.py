@@ -18,6 +18,8 @@ log = get_logger(__name__)
 
 MIN_DRIVE_ROTATIONS = 0.5   # ignore drive measurements below this
 MIN_TURN_ROTATIONS  = 0.3   # ignore turn measurements below this
+MIN_DRIVE_FRACTION  = 0.5   # discard if robot moved less than this fraction of expected distance
+                            # (indicates it hit a wall or obstacle and stalled)
 
 
 class CalibrationManager:
@@ -39,9 +41,16 @@ class CalibrationManager:
             start_px, rotations = self._pending_drive
             self._pending_drive = None
             if rotations >= MIN_DRIVE_ROTATIONS:
-                measured = measure_pixels_per_rotation(start_px, robot_px, rotations)
-                calibration_pixels.update(measured)
-                log.debug("calibrated px/rot -> %.2f", calibration_pixels.ratio)
+                import math
+                actual_px   = math.dist(start_px, robot_px)
+                expected_px = rotations * calibration_pixels.ratio
+                if actual_px < expected_px * MIN_DRIVE_FRACTION:
+                    log.debug("Drive calibration skipped — moved %.1f px, expected %.1f px (likely stalled)",
+                              actual_px, expected_px)
+                else:
+                    measured = measure_pixels_per_rotation(start_px, robot_px, rotations)
+                    calibration_pixels.update(measured)
+                    log.debug("calibrated px/rot -> %.2f", calibration_pixels.ratio)
 
         if self._pending_turn is not None and robot_angle is not None:
             start_angle, rotations, direction = self._pending_turn

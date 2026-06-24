@@ -406,7 +406,7 @@ class GolfBotController:
                 heading_err = angle_error(pose.angle, self._corner_approach_angle)
                 if abs(heading_err) > ALIGN_THRESHOLD_DEG:
                     direction = Command.RIGHT if heading_err > 0 else Command.LEFT
-                    rotations = angle_to_rotations(heading_err)
+                    rotations = angle_to_rotations(heading_err, pos_px=pose.px)
                     log.debug("Pre-approach align %.1f° %s", abs(heading_err), direction.name)
                     self._driver.turn(pose, rotations, direction)
             log.debug("Staging complete — heading in to the ball")
@@ -452,11 +452,11 @@ class GolfBotController:
                 direction = Command.RIGHT if heading_error > 0 else Command.LEFT
                 log.debug("Claw short (%.1f cm) and off-heading (%.1f°) — turning %s",
                           off, heading_error, direction.name)
-                self._driver.turn(pose, angle_to_rotations(heading_error), direction)
+                self._driver.turn(pose, angle_to_rotations(heading_error, pos_px=pose.px), direction)
                 return direction
             nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
             log.debug("Claw short by %.1f cm — nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
-            self._driver.drive(pose, px_to_rotations(nudge_px))
+            self._driver.drive(pose, px_to_rotations(nudge_px, pos_px=pose.px))
             return Command.FORWARD
 
         # Claw within collect range — check we're actually pointed at the ball.
@@ -467,7 +467,7 @@ class GolfBotController:
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_error > 0 else Command.LEFT
             log.debug("At the ball but off-heading (%.1f°) — turning %s", heading_error, direction.name)
-            self._driver.turn(pose, angle_to_rotations(heading_error), direction)
+            self._driver.turn(pose, angle_to_rotations(heading_error, pos_px=pose.px), direction)
             return direction
 
         return self._grab_ball(pose)
@@ -595,7 +595,7 @@ class GolfBotController:
         heading_err = angle_error(pose.angle, self._goal_approach_angle)
         if abs(heading_err) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_err > 0 else Command.LEFT
-            self._driver.turn(pose, angle_to_rotations(heading_err), direction)
+            self._driver.turn(pose, angle_to_rotations(heading_err, pos_px=pose.px), direction)
             return direction
 
         # Phase 3: drive straight in toward (30,300), exactly like a wall ball's
@@ -609,10 +609,10 @@ class GolfBotController:
             heading_error = angle_error(pose.angle, angle_to_target(pose.pos, GOAL_POSITION_CM))
             if abs(heading_error) > ALIGN_THRESHOLD_DEG:
                 direction = Command.RIGHT if heading_error > 0 else Command.LEFT
-                self._driver.turn(pose, angle_to_rotations(heading_error), direction)
+                self._driver.turn(pose, angle_to_rotations(heading_error, pos_px=pose.px), direction)
                 return direction
             nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
-            self._driver.drive(pose, px_to_rotations(nudge_px))
+            self._driver.drive(pose, px_to_rotations(nudge_px, pos_px=pose.px))
             return Command.FORWARD
 
         # Claw at the goal coordinate — release.

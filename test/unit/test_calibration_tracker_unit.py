@@ -30,7 +30,8 @@ class CalibrationTrackerUnitTests(unittest.TestCase):
         with patch("builtins.open", opened), \
              patch("controller.calibration_tracker.calibration_pixels.ratio", 10.123), \
              patch("controller.calibration_tracker.calibration_angle_left.ratio", 20.456), \
-             patch("controller.calibration_tracker.calibration_angle_right.ratio", 30.789):
+             patch("controller.calibration_tracker.calibration_angle_right.ratio", 30.789), \
+             patch("controller.zone_calibration_tracker.zone_tracker.save"):
             values = save_calibration_to_config()
 
         written = opened().write.call_args.args[0]

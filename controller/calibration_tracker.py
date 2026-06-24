@@ -45,6 +45,8 @@ def save_calibration_to_config():
     Only the three numeric literals are rewritten in place; every other line,
     including the inline comments, is left untouched.
 
+    Also saves the zone calibration data to zone_calibration.json.
+
     Returns (pixels_per_rotation, degrees_left, degrees_right).
     """
     new_values = {
@@ -67,6 +69,10 @@ def save_calibration_to_config():
 
     with open(config_path, "w", encoding="utf-8") as f:
         f.write(text)
+
+    # Persist zone calibration alongside global config.
+    from controller.zone_calibration_tracker import zone_tracker
+    zone_tracker.save()
 
     return (new_values["PIXELS_PER_ROTATION"],
             new_values["DEGREES_PER_ROTATION_LEFT"],

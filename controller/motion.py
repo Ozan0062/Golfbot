@@ -26,6 +26,7 @@ from controller.navigation import (
 from controller.calibration_tracker import (
     calibration_pixels, calibration_angle_left, calibration_angle_right,
 )
+from controller.zone_calibration_tracker import zone_tracker
 from config import (
     ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX,
     WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT, CORNER_STAGE_DISTANCES_PX,
@@ -45,13 +46,32 @@ def distance_px(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def px_to_rotations(drive_px):
-    return drive_px / calibration_pixels.ratio
+def px_to_rotations(drive_px, pos_px=None):
+    """Convert a pixel distance to motor rotations.
+
+    If *pos_px* is given and zone calibration data exists for that position,
+    the zone-specific px/rot is used; otherwise the global EMA value is used.
+    """
+    if pos_px is not None:
+        ratio = zone_tracker.get_px_per_rotation(pos_px)
+    else:
+        ratio = calibration_pixels.ratio
+    return drive_px / ratio
 
 
-def angle_to_rotations(heading_error):
-    tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
-    return abs(heading_error) / tracker.ratio * TURN_DAMPING
+def angle_to_rotations(heading_error, pos_px=None):
+    """Convert a heading error (degrees) to motor rotations.
+
+    If *pos_px* is given and zone calibration data exists, the zone-specific
+    deg/rot is used; otherwise the global EMA value is used.
+    """
+    direction = "RIGHT" if heading_error > 0 else "LEFT"
+    if pos_px is not None:
+        ratio = zone_tracker.get_deg_per_rotation(pos_px, direction)
+    else:
+        tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
+        ratio = tracker.ratio
+    return abs(heading_error) / ratio * TURN_DAMPING
 
 
 # --- Staging geometry --------------------------------------------------------
@@ -135,12 +155,12 @@ def get_price(start_px, target_px, *, cross_px=None, cross_size_px=None, start_a
 
     for wp in waypoints:
         # Drive this leg.
-        total_rotations += px_to_rotations(distance_px(prev_px, wp))
+        total_rotations += px_to_rotations(distance_px(prev_px, wp), pos_px=prev_px)
 
         # Turn onto this leg. Bearing in cm so the warp doesn't distort it.
         desired = angle_to_target(px_to_cm(prev_px), px_to_cm(wp))
         if heading is not None and abs(angle_error(heading, desired)) > ALIGN_THRESHOLD_DEG:
-            total_rotations += angle_to_rotations(angle_error(heading, desired))
+            total_rotations += angle_to_rotations(angle_error(heading, desired), pos_px=prev_px)
         heading = desired
         prev_px = wp
 
@@ -190,7 +210,7 @@ class Driver:
             pose.angle, angle_to_target(px_to_cm(pose.px), px_to_cm(target_px))
         )
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
-            rotations = angle_to_rotations(heading_error)
+            rotations = angle_to_rotations(heading_error, pos_px=pose.px)
             if rotations >= MIN_TURN_ROTATIONS:
                 direction = Command.RIGHT if heading_error > 0 else Command.LEFT
                 log.debug("turn %s %.1f deg -> %.2f rot", direction.name, abs(heading_error), rotations)
@@ -199,5 +219,5 @@ class Driver:
 
         drive_px = min(dist - arrive_radius, MAX_DRIVE_PX)
         log.debug("drive %.0f px", drive_px)
-        self.drive(pose, px_to_rotations(drive_px))
+        self.drive(pose, px_to_rotations(drive_px, pos_px=pose.px))
         return Command.FORWARD, False

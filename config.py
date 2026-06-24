@@ -125,3 +125,9 @@ ROBOT_FILTER_RADIUS_PX = 100   # pixels in the warped image
 # --- ArUco marker ------------------------------------------------------------
 ARUCO_DICT      = "DICT_4X4_50"
 ARUCO_MARKER_ID = 0           # marker ID mounted on the robot
+
+# --- Zone calibration --------------------------------------------------------
+# The field is split into 4 quadrants around this centre point (warped px).
+# Each quadrant maintains its own px/rot and deg/rot estimates.
+ZONE_CENTER_PX = (WARPED_WIDTH // 2, WARPED_HEIGHT // 2)   # (450, 300)
+ZONE_CALIBRATION_FILE = os.path.join(BASE_DIR, "zone_calibration.json")

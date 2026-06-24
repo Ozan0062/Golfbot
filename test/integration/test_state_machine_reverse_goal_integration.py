@@ -8,7 +8,10 @@ from unittest.mock import patch
 
 from controller.commands import Command
 from controller.state_machine import GolfBotController, State
-from config import GOAL_HEADING_MAX_CORRECTIONS, GOAL_RELEASE_MARKER_PX
+from config import (
+    GOAL_HEADING_MAX_CORRECTIONS, GOAL_LANE_MAX_REJECTIONS,
+    GOAL_RELEASE_MARKER_PX,
+)
 from test.world_state_helpers import world_state
 
 
@@ -104,6 +107,26 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         self.assertTrue(calls)
         self.assertIsNone(controller._goal_waypoints)
         self.assertEqual(controller._goal_heading_corrections, 0)
+
+    def test_drive_goal_reverses_when_release_lane_rebuild_gets_stuck(self):
+        calls = []
+        controller = GolfBotController()
+        controller.state = State.DRIVE_GOAL
+        controller._goal_waypoints = []
+        controller._goal_lane_rejections = GOAL_LANE_MAX_REJECTIONS
+        controller._driver.reverse = lambda rotations: calls.append(rotations)
+        world = world_state(
+            robot=(GOAL_RELEASE_MARKER_PX[0] * 169.0 / 900, 65.0),
+            robot_px=(GOAL_RELEASE_MARKER_PX[0], GOAL_RELEASE_MARKER_PX[1] + 20),
+            robot_angle=180.0,
+        )
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.BACKWARD)
+        self.assertTrue(calls)
+        self.assertIsNone(controller._goal_waypoints)
+        self.assertEqual(controller._goal_lane_rejections, 0)
 
     def test_drive_goal_transitions_to_release_when_robot_is_at_goal(self):
         controller = GolfBotController()

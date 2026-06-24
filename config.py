@@ -34,7 +34,6 @@ FIELD_SAFETY_MARGIN_CM = 15.0
 # Goal: left wall, vertically centred.
 GOAL_POSITION_CM = (0, FIELD_HEIGHT_CM / 2)
 GOAL_POSITION_PX = (40, 300)   # claw target coordinate at the goal
-GOAL_STAGING_PX  = (40, 400)   # mandatory staging point 100 px right of goal
 
 # --- State-machine / navigation tuning ---------------------------------------
 ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" and drive
@@ -105,12 +104,12 @@ CLASS_NAMES = {
 # on ESC from main.py, writes the learned values back here (see
 # controller/calibration_tracker.save_calibration_to_config). Turn calibration
 # is tracked separately per direction because the robot can turn asymmetrically.
-PIXELS_PER_ROTATION        = 64.98   # pixels travelled per motor rotation (measured)
-DEGREES_PER_ROTATION_LEFT  = 31.11   # degrees turned per motor rotation, turning LEFT
-DEGREES_PER_ROTATION_RIGHT = 29.70   # degrees turned per motor rotation, turning RIGHT
+PIXELS_PER_ROTATION        = 64.49   # pixels travelled per motor rotation (measured)
+DEGREES_PER_ROTATION_LEFT  = 31.51   # degrees turned per motor rotation, turning LEFT
+DEGREES_PER_ROTATION_RIGHT = 29.46   # degrees turned per motor rotation, turning RIGHT
 
 # Ignore ball detections within this radius of the robot (false positives).
-ROBOT_FILTER_RADIUS_PX = 30   # pixels in the warped image
+ROBOT_FILTER_RADIUS_PX = 60   # pixels in the warped image
 
 # --- ArUco marker ------------------------------------------------------------
 ARUCO_DICT      = "DICT_4X4_50"

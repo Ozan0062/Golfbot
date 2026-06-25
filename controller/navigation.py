@@ -1,13 +1,12 @@
 """
-navigation.py — math helpers for the GolfBot controller.
+Math helpers for navigating around the field.
 """
 import math
 
 from config import FIELD_WIDTH_CM, FIELD_HEIGHT_CM, WARPED_WIDTH, WARPED_HEIGHT
 
-# Per-axis warped-pixel -> cm scale. The warp canvas (900x600) does not match the
-# field's aspect ratio (170x124.5), so these two are NOT equal -- px space is
-# anisotropic. Do all *angle* maths in cm to avoid heading-dependent distortion.
+# Conversion from pixels to cm. 
+# We calculate angles in cm because the camera image ratio doesn't match the real field.
 _PX_TO_CM_X = FIELD_WIDTH_CM / WARPED_WIDTH
 _PX_TO_CM_Y = FIELD_HEIGHT_CM / WARPED_HEIGHT
 
@@ -18,23 +17,14 @@ def px_to_cm(point_px):
 
 
 def px_angle_to_cm(angle_deg):
-    """
-    Re-express a pixel-frame heading as the equivalent physical (cm) heading.
-
-    Identity for axis-aligned headings (0/+-90/180); only diagonals shift, because
-    the anisotropic warp stretches x and y differently. Used so a staging point
-    placed in pixel space and the heading we align to before driving in agree.
-    """
+    """Convert an angle from pixel space to real-world cm space."""
     rad = math.radians(angle_deg)
     return math.degrees(math.atan2(_PX_TO_CM_Y * math.sin(rad),
                                    _PX_TO_CM_X * math.cos(rad)))
 
 
 def angle_to_target(robot_pos, target_pos):
-    """
-    Bearing in degrees from robot_pos to target_pos. Feed cm coordinates (not
-    raw warped pixels) so the bearing is undistorted by the anisotropic warp.
-    """
+    """Get the angle to a target position in degrees."""
     dx = target_pos[0] - robot_pos[0]
     dy = target_pos[1] - robot_pos[1]
     return math.degrees(math.atan2(dy, dx))
@@ -109,17 +99,7 @@ _CORNER_APPROACH_ANGLE = {
 
 
 def wall_approach_angle(walls):
-    """
-    Required robot heading (degrees) when collecting a wall or corner ball.
-
-    Wall balls: perpendicular to the wall (robot drives straight into it).
-    Corner balls: 45 deg diagonal into the corner.
-
-    Uses the same angle convention as angle_to_target:
-      0 deg = right, 90 deg = down, -90 deg = up, 180 deg = left.
-
-    Returns None for open-field balls (no constraint).
-    """
+    """Get the correct angle to drive into a wall or corner."""
     if len(walls) >= 2:
         return _CORNER_APPROACH_ANGLE.get(frozenset(walls[:2]))
     if len(walls) == 1:
@@ -130,15 +110,7 @@ def wall_approach_angle(walls):
 # --- Cross approach geometry ----------------------------------------------
 
 def cross_approach_angle(ball_px, cross_px):
-    """
-    Fixed-diagonal heading (deg) for collecting a ball at the centre cross.
-
-    Computes the direction from cross centre → ball, adds 180° to get the
-    approach direction (robot drives from the ball's side toward the cross),
-    then snaps to the nearest 45° diagonal.  This is more robust than a strict
-    quadrant comparison: detection noise must shift the angle by >22.5° before
-    a wrong diagonal is chosen.
-    """
+    """Find the best diagonal angle to approach a ball at the center cross."""
     dx = ball_px[0] - cross_px[0]
     dy = ball_px[1] - cross_px[1]
     raw = math.degrees(math.atan2(dy, dx))   # direction cross→ball
@@ -213,17 +185,7 @@ def path_is_clear(start_px, end_px, obstacles, clearance_px):
 
 def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
                       field_width, field_height, prefer_near_px=None):
-    """
-    Compute a waypoint to steer around a blocking obstacle.
-
-    Places the waypoint perpendicular to the robot→target line at the obstacle's
-    projection.  Both candidates (left and right of the path) are evaluated;
-    the one closest to `prefer_near_px` (defaults to robot_px) is preferred.
-    Falls back to the other side if the preferred candidate is outside the field.
-
-    Returns (x, y) waypoint in pixel coordinates, or None if the path
-    has zero length.
-    """
+    """Calculate a point to drive to so we can avoid an obstacle."""
     dx = target_px[0] - robot_px[0]
     dy = target_px[1] - robot_px[1]
     length = math.hypot(dx, dy)
@@ -267,15 +229,7 @@ def obstacle_waypoint(robot_px, target_px, obstacle_px, clearance_px,
 # --- Cross-obstacle geometry -------------------------------------------------
 
 def cross_avoid_points(cross_px, field_width, field_height):
-    """
-    Eight fixed navigation waypoints around the cross: four cardinal and four
-    diagonal. Each is placed at the midpoint between the cross centre and the
-    corresponding wall (cardinal) or field corner (diagonal). The diagonals let
-    the dodge planner route around a corner when the robot and target sit in
-    diagonally-opposite quadrants - a case the 4 cardinal points alone can't
-    express. Keyed by heading angle (0=right, 45=down-right, 90=down,
-    135=down-left, 180=left, 225=up-left, 270=up, 315=up-right).
-    """
+    """Get standard safe waypoints around the cross for pathfinding."""
     cx, cy = cross_px
     return {
           0: ((cx + field_width)  / 2, cy),                       # right

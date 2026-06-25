@@ -1,25 +1,6 @@
 """
-golfbot_logger.py — centralised logging for GolfBot.
-
-Usage
------
-from golfbot_logger import get_logger
-
-log = get_logger(__name__)          # one line per file
-log.info("State: SEEK")
-log.debug("World dict: %s", world)
-log.warning("Robot pose lost")
-log.error("TCP send failed: %s", e)
-
-Log levels (least → most severe):
-  DEBUG    fine-grained detail (vision pipeline, cm values, …)
-  INFO     normal milestones   (state transitions, ball locked, …)
-  WARNING  recoverable issues  (pose lost, detection dropped, …)
-  ERROR    failures            (TCP error, motor fault, …)
-  CRITICAL unrecoverable       (no camera, no field model, …)
-
-By default the root level is INFO.  Pass LOG_LEVEL=DEBUG as an env var
-(or call setup_logging(level="DEBUG")) to get verbose output.
+Logging setup for the project.
+Prints colors to terminal and saves a log file.
 """
 
 from __future__ import annotations
@@ -82,16 +63,7 @@ def setup_logging(
     log_dir:     Path = LOG_DIR,
     colour:      bool = True,
 ) -> None:
-    """
-    Call once at program start (main.py already does this automatically).
-
-    Parameters
-    ----------
-    level       : "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"
-    log_to_file : write a rotating log file under <log_dir>/
-    log_dir     : directory for log files (created if missing)
-    colour      : coloured console output (disable if piping to a file)
-    """
+    """Call once at program start to setup log file and console output."""
     global _SETUP_DONE
     if _SETUP_DONE:
         return
@@ -132,12 +104,5 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Return a module-level logger.  Call setup_logging() first (main.py does it).
-
-    Example
-    -------
-    log = get_logger(__name__)
-    log.info("SEEK → ALIGN, target at (%.1f, %.1f) cm", x, y)
-    """
+    """Get a logger for the current file."""
     return logging.getLogger(name)

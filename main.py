@@ -1,14 +1,13 @@
 """
-main.py — GolfBot entry point.
+Main loop for the Golfbot.
 
-Each camera frame, in order:
-  1. Grab a frame and undistort lens distortion (if calibrated)
-  2. Detect the field corners → perspective-warp to a top-down view
-  3. Detect the robot pose (ArUco → warped → height-corrected)
-  4. Detect balls and the cross (YOLO, on the warped frame)
-  5. Build a "world" dict with every position in px and cm
-  6. Feed the world into the state machine → get one Command back
-  7. Draw the debug overlay and show it (ESC to quit)
+Every frame we:
+1. Undistort the camera image
+2. Warp the field to top-down view
+3. Find the robot using ArUco
+4. Find balls and cross using YOLO
+5. Send everything to the state machine to get the next motor command
+6. Draw the debug UI
 """
 
 import time
@@ -43,7 +42,7 @@ def main():
     aruco_detector = create_detector()
     stream         = open_stream()
 
-    # Lens calibration is optional — the pipeline works without it, just less accurately.
+    # Lens calibration helps accuracy but isn't strictly required
     mtx, dist   = load_calibration()
     undist_maps = None
     if mtx is not None:
@@ -60,13 +59,13 @@ def main():
 
     try:
         while True:
-            # 1. Grab and undistort the frame.
+            # Get camera frame
             frame = stream.latest()
             if frame is None:
                 continue                       # camera thread not ready yet
             frame = undistort_frame(frame, undist_maps)
 
-            # 2. Detect the field and warp to a top-down view.
+            # Warp field to top-down
             last_corners = detect_field(field_model, frame, last_corners)
             if last_corners is None:
                 now = time.time()
@@ -80,18 +79,18 @@ def main():
             warped, homography = warp_field(frame, last_corners)
             h, w = warped.shape[:2]
 
-            # 3. Robot pose (ArUco → warped → height-corrected).
+            # Find robot
             robot_center, robot_angle = get_true_robot_pose(aruco_detector, frame, homography, w, h)
 
-            # 4. Balls and cross (YOLO on the warped frame).
+            # Find balls
             detections = detect_objects(object_model, warped)
             detections = filter_detections_near_robot(detections, robot_center)
 
-            # 5 + 6. Build the world and run one state-machine tick.
+            # Run state machine
             world:WorldState   = build_world_state(detections, robot_center, robot_angle, w, h)
             command = controller.update(world)
 
-            # 7. Draw the overlay and show it.
+            # Update UI
             view  = controller.debug_view()
             debug = draw_debug_overlay(
                 warped, detections, world, robot_center, robot_angle,

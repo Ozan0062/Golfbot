@@ -35,13 +35,8 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
 
 class CameraStream:
     """
-    Background thread that continuously drains the camera buffer.
-
-    The thread calls cap.read() in a tight loop and stores the result.
-    Because it never stops reading, the buffer never builds up — even
-    during long blocking EV3 moves.
-
-    Call latest() to get the most recent frame.  No flushing needed.
+    Thread that constantly grabs camera frames.
+    This prevents old frames from piling up while the robot is driving.
     """
 
     def __init__(self, cap):

@@ -1,17 +1,6 @@
 """
-motion.py — movement maths and the low-level Driver for the state machine.
-
-Keeps the "how to move" details out of state_machine.py:
-  * unit conversions (pixels <-> motor rotations, angles -> rotations)
-  * staging-waypoint geometry for wall/corner/goal approaches
-  * the Driver: issues motor commands, records calibration, invalidates the pose
-  * drive_toward(): the single "turn to face a point, else drive toward it" step
-    used by every navigating state (AVOID, APPROACH, DRIVE_GOAL).
-
-The warp canvas is anisotropic (900/170 != 600/124.5 px-per-cm), so a bearing
-taken straight from pixels is distorted with heading. Distances stay in pixels
-(that's what the drive calibration is in), but bearings are taken in cm via
-px_to_cm so they agree with the cm-frame pose.angle.
+Translates pixels and angles into motor rotations.
+Also contains the Driver class that sends commands to the robot.
 """
 
 import math
@@ -47,11 +36,7 @@ def distance_px(a, b):
 
 
 def px_to_rotations(drive_px, pos_px=None):
-    """Convert a pixel distance to motor rotations.
-
-    If *pos_px* is given and zone calibration data exists for that position,
-    the zone-specific px/rot is used; otherwise the global EMA value is used.
-    """
+    """Convert pixels to motor rotations using zone calibration if possible."""
     if pos_px is not None:
         ratio = zone_tracker.get_px_per_rotation(pos_px)
     else:
@@ -60,11 +45,7 @@ def px_to_rotations(drive_px, pos_px=None):
 
 
 def angle_to_rotations(heading_error, pos_px=None):
-    """Convert a heading error (degrees) to motor rotations.
-
-    If *pos_px* is given and zone calibration data exists, the zone-specific
-    deg/rot is used; otherwise the global EMA value is used.
-    """
+    """Convert degrees to motor rotations using zone calibration if possible."""
     direction = "RIGHT" if heading_error > 0 else "LEFT"
     if pos_px is not None:
         ratio = zone_tracker.get_deg_per_rotation(pos_px, direction)
@@ -98,13 +79,7 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
 # --- Route-cost simulation (TSP edge weight) ---------------------------------
 
 def _approach_waypoints(start_px, target_px):
-    """
-    Final-approach waypoints for one ball, mirroring the wall/corner staging the
-    state machine plans in _begin_staged_approach.
-
-      open field    -> drive straight in              -> [target]
-      wall / corner -> staged approach, then the ball -> [stage_far, stage_near, target]
-    """
+    """Get the final approach waypoints based on where the ball is."""
     zone, walls = classify_zone(target_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
     if zone in ("wall", "corner"):
         angle = wall_approach_angle(walls)
@@ -170,10 +145,7 @@ def get_price(start_px, target_px, *, cross_px=None, cross_size_px=None, start_a
 # --- Driver ------------------------------------------------------------------
 
 class Driver:
-    """
-    Owns the actual motor calls. Every move records a calibration sample and
-    invalidates the pose cache (so the FSM waits for the robot to settle).
-    """
+    """Helper class to send motor commands and update calibration."""
 
     def __init__(self, cal, pose_cache):
         self._cal  = cal

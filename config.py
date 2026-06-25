@@ -1,5 +1,4 @@
-"""config.py — all shared project constants."""
-
+"""All shared project constants."""
 import os
 
 # --- Camera ------------------------------------------------------------------
@@ -11,9 +10,8 @@ CAMERA_HEIGHT = 480
 FIELD_WIDTH_CM  = 170.0
 FIELD_HEIGHT_CM = 124.5
 
-# Warped (top-down) image dimensions. NOTE: 900x600 is 3:2, which does NOT match
-# the 170x124.5 field, so warped px/cm is anisotropic. Angle maths is done in cm
-# (see controller/navigation.py) so this mismatch no longer biases headings.
+# Warped image size. 900x600 is 3:2, which doesn't perfectly match the field ratio.
+# We do angle math in cm so this difference doesn't mess up headings.
 WARPED_WIDTH  = 900
 WARPED_HEIGHT = 600
 
@@ -21,9 +19,8 @@ WARPED_HEIGHT = 600
 CAMERA_HEIGHT_CM       = 176.5
 ROBOT_MARKER_HEIGHT_CM = 20.6    # ArUco marker height above the field
 
-# The point on the field the camera hangs directly above, in warped pixels.
-# Scaled from (312, 303) in the old 640x480 view to 900x600.
-# Re-measure in the 900x600 warped image if you need more precision.
+# Camera center point in warped pixels.
+# Re-measure this if we move the camera setup.
 CAMERA_CENTER_PX = (446, 350)
 
 # --- Navigation safety -------------------------------------------------------
@@ -31,14 +28,12 @@ CAMERA_CENTER_PX = (446, 350)
 # Set to at least half the robot's widest dimension.
 FIELD_SAFETY_MARGIN_CM = 15.0
 
-# Goal: treated like a ball sitting just inside the right wall, vertically centred.
-# Both forms describe the SAME point (~860 px in the warped field) so the staged
-# drive-in (uses PX) and the release gate (uses CM) agree. Aiming the claw at the
-# wall plane made the robot ram the wall and never satisfy the release.
+# Goal position. Treated like a ball on the right wall.
+# We aim a bit inside the field so the robot doesn't crash into the wall during release.
 GOAL_POSITION_PX = (860, 300)   # claw target coordinate at the goal
 GOAL_POSITION_CM = (GOAL_POSITION_PX[0] * FIELD_WIDTH_CM / WARPED_WIDTH,
                     GOAL_POSITION_PX[1] * FIELD_HEIGHT_CM / WARPED_HEIGHT)
-# First navigate to this point on the goal lane, then face right and drive straight in.
+# Go to this point first before driving straight into the goal.
 GOAL_LINEUP_PX = (680, GOAL_POSITION_PX[1])
 GOAL_LINEUP_ARRIVE_PX = 8
 
@@ -47,13 +42,9 @@ ALIGN_THRESHOLD_DEG = 2      # below this heading error we count as "aligned" an
 MIN_TURN_ROTATIONS  = 0.25   # ignore turns smaller than this
 TURN_DAMPING        = 0.6    # scale turns down to avoid oscillation when close
 
-MARKER_TO_CLAW_CM = 17         # HORIZONTAL (floor-plane) offset from the ArUco marker
-                             # centre to the claw tip, in cm. Measure floor-to-floor
-                             # (point under the marker -> point under the claw tip),
-                             # NOT the 3D slant from the 19.8 cm marker to the 7.5 cm tip.
-CLAW_HEIGHT_CM    = 7.5      # claw tip height above the floor (cm). Informational only --
-                             # the claw's floor position is derived geometrically from the
-                             # marker, so no separate parallax step is applied to it.
+MARKER_TO_CLAW_CM = 17       # Distance from marker center to claw tip along the floor (cm).
+                             # Don't measure the diagonal!
+CLAW_HEIGHT_CM    = 7.5      # Height of claw tip from floor. Just for info.
 GOAL_RELEASE_MARKER_PX = (
     GOAL_POSITION_PX[0] - MARKER_TO_CLAW_CM * WARPED_WIDTH / FIELD_WIDTH_CM,
     GOAL_POSITION_PX[1],
@@ -67,13 +58,10 @@ GOAL_HEADING_RECOVERY_REVERSE_ROTATIONS = 0.8
 GOAL_LANE_MAX_REJECTIONS = 2
 GOAL_LANE_RECOVERY_REVERSE_ROTATIONS = 0.8
 
-COLLECT_RADIUS_CM = 2.0      # claw-tip -> ball distance (cm) at which we grab.
-COLLECT_RADIUS_PX = 8        # legacy pixel radius (kept for tooling/tests; the live
-                             # collect check is COLLECT_RADIUS_CM, measured in cm).
-COLLECT_ANGLE_DEG = 5.0      # max angular offset (deg) in x AND y, measured from the
-                             # marker using the arm length as reference, before grabbing.
-COLLECT_NUDGE_MIN_PX = 3     # minimum drive distance (px) for an angle-correction nudge,
-                             # so the motor command is always large enough to execute.
+COLLECT_RADIUS_CM = 2.0      # Grab when claw tip is this close to the ball (cm).
+COLLECT_RADIUS_PX = 8        # Old pixel radius for tests.
+COLLECT_ANGLE_DEG = 5.0      # Max angle error before we try to grab.
+COLLECT_NUDGE_MIN_PX = 3     # Drive at least this much when nudging so motors actually move.
 
 GOAL_ARRIVE_PX = 100         # arrive radius (px) for the final goal approach
 GOAL_HEADING_DEG     = 0.0    # required robot heading when entering the goal
@@ -86,12 +74,10 @@ CROSS_CLEARANCE_PX     = 100                       # stay at least this far from
 AVOID_WAYPOINT_DIST_PX = CROSS_CLEARANCE_PX * 2  # how far to the side the dodge waypoint sits
 AVOID_ARRIVE_PX        = 15                      # close enough to a waypoint to count as reached
 
-# --- Cross pickup (ball sitting in/at the centre cross) ----------------------
-# A ball this close to the cross is collected like a corner ball: staged
-# approach along a fixed diagonal, then back off after grabbing.
-CROSS_DIAMETER_CM       = 20.0   # physical size of the centre cross
-# Fallback cross radius in warped px when the live detection size is unavailable.
-# Use the larger per-axis px/cm scale so the radius is generous (never too small).
+# --- Center cross pickup ----------------------
+# Balls near the cross are picked up like corner balls (approach diagonally and back off).
+CROSS_DIAMETER_CM       = 20.0   # Cross size in cm.
+# Backup cross size in pixels if YOLO doesn't give us a bounding box.
 CROSS_RADIUS_PX         = CROSS_DIAMETER_CM / 2 * max(
     WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
 
@@ -100,7 +86,7 @@ STAGING_DISTANCE_PX = 150    # standoff for the final straight-in approach.
                              # Must be >= WALL_MARGIN_PX / cos(45deg) ~= 170 so corner
                              # staging points land outside the margin on both axes.
 
-# One staging point per wall/corner ball: 1x the staging distance.
+# Waypoints for wall/corner balls.
 CORNER_STAGE_DISTANCES_PX = (STAGING_DISTANCE_PX,)
 FIELD_EDGE_MARGIN_PX = 30    # keep staging waypoints this far inside the field edges
 GOAL_APPROACH_ANGLE_DEG = 0.0     # goal is on the right wall -> approach heading right
@@ -118,11 +104,9 @@ CLASS_NAMES = {
     2: "wb",   # white ball
 }
 
-# --- Drive/turn calibration initial estimates (tune to your robot) -----------
-# These are starting values only — the live system refines them each run and,
-# on ESC from main.py, writes the learned values back here (see
-# controller/calibration_tracker.save_calibration_to_config). Turn calibration
-# is tracked separately per direction because the robot can turn asymmetrically.
+# --- Default motor calibration ---
+# These update automatically when you exit the program safely (ESC).
+# Left and right turns have different values because the robot isn't perfectly symmetric.
 PIXELS_PER_ROTATION        = 63.21   # pixels travelled per motor rotation (measured)
 DEGREES_PER_ROTATION_LEFT  = 30.81   # degrees turned per motor rotation, turning LEFT
 DEGREES_PER_ROTATION_RIGHT = 29.27   # degrees turned per motor rotation, turning RIGHT
@@ -134,8 +118,7 @@ ROBOT_FILTER_RADIUS_PX = 100   # pixels in the warped image
 ARUCO_DICT      = "DICT_4X4_50"
 ARUCO_MARKER_ID = 0           # marker ID mounted on the robot
 
-# --- Zone calibration --------------------------------------------------------
-# The field is split into 4 quadrants around this centre point (warped px).
-# Each quadrant maintains its own px/rot and deg/rot estimates.
+# --- Zone calibration ---
+# We split the field into 4 zones to handle uneven floor friction.
 ZONE_CENTER_PX = (WARPED_WIDTH // 2, WARPED_HEIGHT // 2)   # (450, 300)
 ZONE_CALIBRATION_FILE = os.path.join(BASE_DIR, "zone_calibration.json")

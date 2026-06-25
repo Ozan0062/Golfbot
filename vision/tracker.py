@@ -68,14 +68,7 @@ def robot_px_to_cm(center_px, image_width, image_height,
 
 
 def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_matrix):
-    """
-    Detect the ArUco marker on the raw (un-warped) frame, then project
-    the robot's centre and heading into warped top-down coordinates.
-
-    Returns (center_px, forward_px, angle_deg) or (None, None, None).
-    forward_px is needed so correct_robot_height can correct both points
-    and recompute the angle — without this, the angle is off at field edges.
-    """
+    """Find robot in raw camera view and project to top-down view."""
     center_raw, angle_raw = detect_robot(aruco_detector, raw_frame)
     if center_raw is None:
         return None, None, None
@@ -185,9 +178,7 @@ def get_true_robot_pose(aruco_detector, raw_frame, homography_matrix,
 
 
 def filter_detections_near_robot(detections, robot_center_px, radius=None):
-    """
-    Remove ball detections whose pixel centre is within <radius> px of the robot's ArUco marker.
-    """
+    """Ignore balls that are too close to the robot (usually false positives)."""
     if radius is None:
         from config import ROBOT_FILTER_RADIUS_PX
         radius = ROBOT_FILTER_RADIUS_PX
@@ -238,14 +229,7 @@ def build_world_state(detections, robot_center, robot_angle, image_w, image_h) -
 
 
 def extract_objects(detections_cm) -> WorldState:
-    """
-    Split YOLO detections into named objects.
-    Robot is NOT included here — it comes from ArUco separately.
-    Returns WorldState with both cm and pixel positions.
-
-    For the single-object classes (orange ball, cross) the most confident
-    detection wins.
-    """
+    """Sort YOLO bounding boxes into lists of white balls, orange ball, and cross."""
     objects = WorldState()
     best_ob_conf    = 0.0   # confidence of the orange ball kept so far
     best_cross_conf = 0.0   # confidence of the cross kept so far

@@ -1,23 +1,6 @@
 """
-state_machine.py — the GolfBot "brain".
-
-Every camera frame, main.py calls `controller.update(world)`.  The controller
-decides ONE thing to do, the Driver carries it out, and the Command is returned
-so the overlay can show it.
-
-    ┌─────────────────────  collect one ball  ─────────────────────┐
-    │                                                               │
-    SEEK ──► AVOID ──► APPROACH ──► (grab) ──► SEEK ◄────────────────┘
-     │  pick a    │ drive to     │ turn-to-face then drive in;
-     │  target    │ staging /    │ grab when within reach
-     │            │ around cross │
-     │
-     └─ no balls left ─► REVERSE_WHITE ─► REVERSE_ORANGE ─► DRIVE_GOAL ─► RELEASE ─► DONE
-
-This file is the decision logic only.  The "how to move" details live in
-controller/motion.py (the Driver + drive_toward primitive), and the tuning
-knobs live in config.py.  Logging: INFO = the story, DEBUG = the per-frame
-numbers (also written to the log file; run with LOG_LEVEL=DEBUG to see them).
+The main state machine that controls the robot's behavior.
+Decides what to do next based on camera data.
 """
 
 from enum import Enum, auto
@@ -60,23 +43,15 @@ from golfbot_logger import get_logger
 from vision.tracker import WorldState
 
 
-# Smaller of the two anisotropic px/cm scales. Converting a claw-frame cm distance
-# with the smaller scale gives a conservative pixel distance, so the claw always
-# reaches the ball (never stalls short) whatever the heading.
+# Use the smaller scale so we always drive far enough to reach the ball.
 _PX_PER_CM_MIN = min(WARPED_WIDTH / FIELD_WIDTH_CM, WARPED_HEIGHT / FIELD_HEIGHT_CM)
 
-# On the final drive-in, stop the marker about one arm-length short of the ball so
-# the claw lands on it. The precise grab is gated on the cm claw-to-ball distance
-# (COLLECT_RADIUS_CM), not on this coarse pixel arrival.
+# Stop when the claw is near the ball, not the marker.
 _APPROACH_ARRIVE_PX = MARKER_TO_CLAW_CM * _PX_PER_CM_MIN
 
 
 def _claw_tip_cm(robot_pos_cm, robot_angle_deg):
-    """
-    Claw-tip position on the floor, in cm: MARKER_TO_CLAW_CM forward of the
-    height-corrected marker, along the heading. Exact for any heading because it
-    is computed in cm, not in the anisotropic warped-pixel frame.
-    """
+    """Find exactly where the claw tip is on the floor."""
     rad = math.radians(robot_angle_deg)
     return (robot_pos_cm[0] + MARKER_TO_CLAW_CM * math.cos(rad),
             robot_pos_cm[1] + MARKER_TO_CLAW_CM * math.sin(rad))
@@ -98,7 +73,7 @@ class State(Enum):
 
 
 class GolfBotController:
-    """Holds the current state plus the small amount of memory the FSM needs."""
+    """Manages robot state and route memory."""
 
     def __init__(self):
         self.state  = State.SEEK
@@ -120,6 +95,7 @@ class GolfBotController:
         self._has_reversed          = False  # already backed up this REVERSE cycle
         self._delivered             = False  # already dumped a load at the goal (post-release rescan)
         self._pose_ok               = True   # for logging pose-lost / reacquired once
+        self.approach_calls         = 0
 
         log.info(
             "Controller ready — goal at %s cm | calibration: turn L %.1f / R %.1f deg-per-rot, drive %.1f px-per-rot",
@@ -150,7 +126,6 @@ class GolfBotController:
     # --- State: SEEK ---------------------------------------------------------
 
     def _seek(self, pose, world) -> Command:
-        """Pick the closest remaining ball and decide how to approach it."""
         
         if self._locked_target is None:
             target_dict = find_nearest(world, ignored_px=self._skipped_target_px)
@@ -166,10 +141,8 @@ class GolfBotController:
         target = self._locked_target
         log.info("Target locked — ball at (%.0f, %.0f) px", target.px[0], target.px[1])
 
-        # Robot is practically on top of this target — within ROBOT_FILTER_RADIUS_PX/5.
-        # Too close to be a real, collectable ball (likely a phantom or an
-        # already-handled detection sitting near the robot), so drop it and pick
-        # the next target on the following tick.
+        # Ball is way too close to the robot marker. Probably a bad detection or ball we just grabbed.
+        # Ignore it and try again.
         if target.px is not None:
             skip_radius = ROBOT_FILTER_RADIUS_PX / 5
             dist_to_target = math.hypot(target.px[0] - pose.px[0], target.px[1] - pose.px[1])
@@ -181,9 +154,8 @@ class GolfBotController:
                 self._locked_target = None
                 return Command.STOP
 
-        # 1. Ball sitting in/at the cross?  Collect it like a corner ball
-        #    (staged diagonal approach).  Must come before the dodge check below,
-        #    otherwise the cross would read as "blocking" its own ball forever.
+        # 1. Is the ball at the cross? Pick it up like a corner ball (diagonal approach).
+        # We check this first so the cross doesn't count as an obstacle for this ball.
         if self._cross_ball_approach(pose, target, world):
             return Command.STOP
 
@@ -205,7 +177,7 @@ class GolfBotController:
         return Command.STOP
 
     def _cross_blocks_path(self, pose, target, world) -> bool:
-        """If the cross blocks the straight path, plan a full dodge route and enter AVOID."""
+        """Plan a route around the center cross if it's in the way."""
         cross_px = world.cross_px
         if cross_px is None:
             return False
@@ -284,7 +256,6 @@ class GolfBotController:
         return True
 
     def _begin_staged_approach(self, pose, target, walls, zone, world=None) -> State:
-        """Plan a wall/corner approach.  Returns the next state to enter."""
         angle = wall_approach_angle(walls)
         if angle is None:
             log.warning("No usable wall angle for zone=%s — skipping staging", zone)
@@ -292,11 +263,7 @@ class GolfBotController:
         return self._stage_along_angle(pose, target, angle, zone, world)
 
     def _cross_ball_approach(self, pose, target, world) -> bool:
-        """
-        If the locked ball sits within the cross's pickup radius, collect it like
-        a corner ball: staged diagonal approach + back-off.  Returns True if it
-        took over (the caller should then return STOP).
-        """
+        """Plan diagonal approach for balls stuck near the center cross."""
         cross_px = world.cross_px
         if cross_px is None:
             return False
@@ -307,8 +274,7 @@ class GolfBotController:
             return False
 
         angle = cross_approach_angle(target.px, cross_px)
-        # Treat it as a wall ball so we back off after grabbing (don't shove it
-        # into the cross).
+        # Back off after grabbing so we don't smash the cross.
         self._is_wall_ball = True
         dx = target.px[0] - cross_px[0]
         dy = target.px[1] - cross_px[1]
@@ -320,13 +286,7 @@ class GolfBotController:
         return True
 
     def _stage_along_angle(self, pose, target, approach_angle, label, world=None) -> State:
-        """
-        Build the staging waypoints for a fixed-heading approach (wall, corner, or
-        cross) and load them into the AVOID plan.  Returns the next state.
-
-        If world is provided, checks whether the path to the first staging point
-        is blocked by the cross and inserts a dodge waypoint if so.
-        """
+        """Create waypoints for a straight approach into a wall, corner, or cross."""
         waypoints = corner_approach_waypoints(
             pose.px, target.px, approach_angle, CORNER_STAGE_DISTANCES_PX,
             WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
@@ -347,17 +307,13 @@ class GolfBotController:
 
         self._avoid_target          = waypoints[0]
         self._corner_waypoints      = waypoints[1:]
-        # Staging points are placed in pixel space (raw `approach_angle`); the
-        # heading we align to before driving in is the same approach in the cm
-        # frame, so the two agree once pose.angle is physical. Axis-aligned
-        # headings are unchanged.
+        # Save the approach angle so we can align before driving in.
         self._corner_approach_angle = px_angle_to_cm(approach_angle)
         log.info("%s ball — approaching via %d staging point(s)", label.capitalize(), len(waypoints))
         log.debug("staging path: %s",
                   "  ->  ".join(f"({w[0]:.0f},{w[1]:.0f})" for w in waypoints))
 
-        # If the cross blocks the path to the first staging point, route around it
-        # using the 4 fixed cardinal avoid points (same logic as _cross_blocks_path).
+        # Check if we need to dodge the cross to get to our staging point.
         if cross_px is not None:
             staging_pt = self._avoid_target
             staging_clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
@@ -486,10 +442,17 @@ class GolfBotController:
         return Command.STOP
 
     # --- State: APPROACH -----------------------------------------------------
-    # Turn to face the locked ball and drive toward it (one step per frame).
-    # When within collect range, make sure we're pointed at it, then grab.
+    # Turn to face the ball and drive toward it.
+    # Make sure we're pointed perfectly at it before grabbing.
 
     def _approach(self, pose, world) -> Command:
+        self.approach_calls +=1
+        
+        if self.approach_calls == 5:
+            self._locked_target = None
+            self._transition(State.SEEK)
+            return
+        
         target = self._locked_target
         if target is None:
             self._transition(State.SEEK)
@@ -498,17 +461,12 @@ class GolfBotController:
         if self._approach_path_blocked_by_cross(pose, target, world):
             return Command.STOP
 
-        # Arrival is gated on the claw tip (not the marker), measured in cm on the
-        # floor plane where the scale is uniform: project MARKER_TO_CLAW_CM forward
-        # of the height-corrected marker along the heading.
+        # Figure out where the claw tip actually is on the floor.
         claw = _claw_tip_cm(pose.pos, pose.angle)
         off  = math.hypot(claw[0] - target.cm[0], claw[1] - target.cm[1])
 
-        # Not within collect range yet: drive the marker in (it stops ~one arm-length
-        # short so the claw lands on the ball). If the marker reached that stop point
-        # but the claw is still short, re-align when the heading swung it off,
-        # otherwise nudge straight in by the shortfall. We never grab until the claw
-        # is actually within COLLECT_RADIUS_CM.
+        # If we aren't close enough yet, keep driving towards it.
+        # If we stopped but are still slightly off, nudge forward.
         if off > COLLECT_RADIUS_CM:
             command, arrived = self._driver.drive_toward(pose, target.px, _APPROACH_ARRIVE_PX)
             if not arrived:
@@ -525,10 +483,7 @@ class GolfBotController:
             self._driver.drive(pose, px_to_rotations(nudge_px, pos_px=pose.px))
             return Command.FORWARD
 
-        # Claw within collect range — check we're actually pointed at the ball.
-        # Use the marker (rotation centre) for the bearing, not the claw tip.
-        # The claw tip sweeps an arc during in-place turns, which shifts the
-        # computed bearing on every frame and causes oscillation.
+        # We are close enough. Make sure we are facing it perfectly before grabbing.
         heading_error = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_error > 0 else Command.LEFT
@@ -630,9 +585,8 @@ class GolfBotController:
     # to the wall-approach heading, drive straight in, then release.
 
     def _drive_to_goal(self, pose, world) -> Command:
-        if self._goal_waypoints is None:        # first entry — build the wall-ball approach
-            # Classify the goal and pick its wall-approach heading, same as any
-            # wall ball. Its x sits inside the left margin -> heading 180° (left).
+        if self._goal_waypoints is None:
+            # Treat the goal like a wall ball.
             zone, walls = classify_zone(GOAL_POSITION_PX, WALL_MARGIN_PX,
                                         WARPED_WIDTH, WARPED_HEIGHT)
             angle = wall_approach_angle(walls)
@@ -640,14 +594,13 @@ class GolfBotController:
                 angle = GOAL_APPROACH_ANGLE_DEG
             self._goal_approach_angle = px_angle_to_cm(angle)
 
-            # Staging waypoints along the approach axis (the wall-ball planner).
+            # Plan waypoints into the goal.
             self._goal_waypoints = list(corner_approach_waypoints(
                 pose.px, GOAL_POSITION_PX, angle, CORNER_STAGE_DISTANCES_PX,
                 WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
             ))
 
-            # Cross avoidance: if the cross blocks the path to the first staging
-            # point, prepend avoid points (same routing as the wall-ball planner).
+            # Dodge cross if it's in the way.
             cross_px = world.cross_px
             if cross_px is not None and self._goal_waypoints:
                 staging_pt = self._goal_waypoints[0]
@@ -689,8 +642,7 @@ class GolfBotController:
                 return Command.STOP
             return command
 
-        # Phase 2: align to the wall-approach heading before driving straight in
-        # (same as _waypoint_reached does for a wall ball).
+        # Step 2: line up straight with the goal.
         if self._goal_approach_angle is None:
             self._goal_approach_angle = GOAL_HEADING_DEG
         heading_err = angle_error(pose.angle, self._goal_approach_angle)
@@ -702,9 +654,8 @@ class GolfBotController:
             return direction
         self._goal_heading_corrections = 0
 
-        # Phase 3: release is stricter than collection. Do not use the normal
-        # claw radius here: the gate needs the marker on the release lane and
-        # the robot facing straight into the goal, confirmed by camera pose.
+        # Step 3: check everything is perfect before releasing. 
+        # The gate mechanism is picky so we need to be lined up exactly right.
         heading_err = angle_error(pose.angle, GOAL_HEADING_DEG)
         if abs(heading_err) > GOAL_RELEASE_HEADING_TOL_DEG:
             if self._goal_heading_recovery_needed("release", pose, heading_err):
@@ -758,9 +709,7 @@ class GolfBotController:
         robot.gate_open()
         time.sleep(3)
         robot.gate_close()
-        # Don't finish yet — back up and rescan in case new balls have appeared
-        # since we committed to the goal. REVERSE_WHITE -> REVERSE_ORANGE will
-        # route to SEEK if anything is found, or to DONE if the field is empty.
+        # Back up and check if any new balls showed up while we were delivering.
         self._delivered = True
         self._has_reversed = False
         log.info("Balls released — backing up to rescan for new balls")

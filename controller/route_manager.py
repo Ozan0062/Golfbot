@@ -1,13 +1,6 @@
 """
-route_manager.py — Nearest-ball selection for ball collection.
-
-COLLECTION ORDER (enforced):
-  1. All white balls first (nearest from current robot position, re-evaluated each SEEK)
-  2. Orange ball last (only targeted after all whites are collected)
-  3. Then the state machine transitions to DRIVE_GOAL
-
-The state machine calls get_target() on every SEEK entry to always pick
-the closest remaining ball. advance() is a no-op kept for interface compat.
+Picks which ball to go for next.
+We always get white balls first, then the orange one.
 """
 
 import math

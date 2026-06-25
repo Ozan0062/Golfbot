@@ -1,5 +1,5 @@
 """
-zone_calibrate.py — zone-based ongoing calibration tool.
+zone_calibrate.py - zone-based ongoing calibration tool.
 
 Drives the robot through a systematic pattern across all four field quadrants,
 measuring drive and turn ratios in each zone.  The longer the script runs, the
@@ -45,7 +45,7 @@ SETTLE_WAIT   = 0.5    # seconds to wait after a motor command before measuring
 POSE_ATTEMPTS = 80     # max frames to try for a valid pose
 
 # --------------------------------------------------------------------------
-# Zone target points — one per zone, well inside each quadrant so movements
+# Zone target points - one per zone, well inside each quadrant so movements
 # stay within the same zone.
 # --------------------------------------------------------------------------
 _MARGIN = 150  # px from the zone border to keep all movement within one zone, safely away from walls
@@ -59,7 +59,7 @@ ZONE_TARGETS = {
 }
 
 # Order of zones in the calibration route (a loop through all 4).
-ZONE_ORDER = [0, 1, 3, 2]  # TL → TR → BR → BL → back to TL
+ZONE_ORDER = [0, 1, 3, 2]  # TL -> TR -> BR -> BL -> back to TL
 
 
 # --------------------------------------------------------------------------
@@ -120,13 +120,13 @@ def _navigate_to(target_px, stream, undist_maps, field_model, aruco_detector,
     for step in range(200):  # safety limit
         center, angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
         if center is None:
-            log.warning("Lost pose during navigation — retrying")
+            log.warning("Lost pose during navigation - retrying")
             time.sleep(0.2)
             continue
 
         dist = math.hypot(center[0] - target_px[0], center[1] - target_px[1])
         if dist <= arrive_radius:
-            log.info("Arrived at (%.0f, %.0f) — dist %.0f px", target_px[0], target_px[1], dist)
+            log.info("Arrived at (%.0f, %.0f) - dist %.0f px", target_px[0], target_px[1], dist)
             return last_corners
 
         # Heading error
@@ -213,7 +213,7 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
     log.info("Zone %d: Drive forward %.1f rot...", zone_id, CAL_DRIVE_ROT)
     start_px, start_angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
     if start_px is None:
-        log.warning("Zone %d: No pose before drive — skipping drive", zone_id)
+        log.warning("Zone %d: No pose before drive - skipping drive", zone_id)
     else:
         robot.drive(CAL_DRIVE_ROT)
         time.sleep(SETTLE_WAIT)
@@ -226,10 +226,10 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
                 zone_tracker.update_drive(zone_id, measured)
                 log.info("Zone %d drive: %.2f px/rot", zone_id, zone_tracker.zones[zone_id].px_per_rot)
             else:
-                log.warning("Zone %d: Drive crossed zone boundary (%s→%s) — skipping",
+                log.warning("Zone %d: Drive crossed zone boundary (%s->%s) - skipping",
                             zone_id, start_zone, end_zone)
         else:
-            log.warning("Zone %d: No pose after drive — skipping drive measurement", zone_id)
+            log.warning("Zone %d: No pose after drive - skipping drive measurement", zone_id)
 
     if _show_overlay(stream, undist_maps, field_model, last_corners,
                      [f"Zone {zone_id} ({zone_name}): drive done"]):
@@ -239,7 +239,7 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
     log.info("Zone %d: Turn left %.1f rot...", zone_id, CAL_TURN_ROT)
     _, start_angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
     if start_angle is None:
-        log.warning("Zone %d: No pose before left turn — skipping", zone_id)
+        log.warning("Zone %d: No pose before left turn - skipping", zone_id)
     else:
         robot.turn(CAL_TURN_ROT, "LEFT")
         time.sleep(SETTLE_WAIT)
@@ -249,7 +249,7 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
             zone_tracker.update_turn(zone_id, measured, "LEFT")
             log.info("Zone %d turn L: %.2f deg/rot", zone_id, zone_tracker.zones[zone_id].deg_per_rot_left)
         else:
-            log.warning("Zone %d: No pose after left turn — skipping", zone_id)
+            log.warning("Zone %d: No pose after left turn - skipping", zone_id)
 
     if _show_overlay(stream, undist_maps, field_model, last_corners,
                      [f"Zone {zone_id} ({zone_name}): left turn done"]):
@@ -259,7 +259,7 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
     log.info("Zone %d: Turn right %.1f rot...", zone_id, CAL_TURN_ROT)
     _, start_angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
     if start_angle is None:
-        log.warning("Zone %d: No pose before right turn — skipping", zone_id)
+        log.warning("Zone %d: No pose before right turn - skipping", zone_id)
     else:
         robot.turn(CAL_TURN_ROT, "RIGHT")
         time.sleep(SETTLE_WAIT)
@@ -269,7 +269,7 @@ def _calibrate_in_zone(zone_id, stream, undist_maps, field_model, aruco_detector
             zone_tracker.update_turn(zone_id, measured, "RIGHT")
             log.info("Zone %d turn R: %.2f deg/rot", zone_id, zone_tracker.zones[zone_id].deg_per_rot_right)
         else:
-            log.warning("Zone %d: No pose after right turn — skipping", zone_id)
+            log.warning("Zone %d: No pose after right turn - skipping", zone_id)
 
     if _show_overlay(stream, undist_maps, field_model, last_corners,
                      [f"Zone {zone_id} ({zone_name}): calibration complete"]):
@@ -369,7 +369,7 @@ def main():
             # Wait for user input between iterations
             while True:
                 if _show_overlay(stream, undist_maps, field_model, last_corners,
-                                 [f"Iteration {iteration} done — C: next iteration, ESC: quit"],
+                                 [f"Iteration {iteration} done - C: next iteration, ESC: quit"],
                                  wait_ms=100):
                     aborted = True
                     break
@@ -398,7 +398,7 @@ def _save_and_exit(stream):
     print("═" * 60)
     print(zone_tracker.summary_table())
     print("═" * 60 + "\n")
-    log.info("Zone calibration saved — exiting.")
+    log.info("Zone calibration saved - exiting.")
 
 
 if __name__ == "__main__":

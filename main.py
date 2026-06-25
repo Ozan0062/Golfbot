@@ -47,7 +47,7 @@ def main():
     undist_maps = None
     if mtx is not None:
         undist_maps = build_undistort_maps(mtx, dist, (CAMERA_WIDTH, CAMERA_HEIGHT))
-        log.info("Lens calibration loaded — undistort maps built (%dx%d)", CAMERA_WIDTH, CAMERA_HEIGHT)
+        log.info("Lens calibration loaded, undistort maps built (%dx%d)", CAMERA_WIDTH, CAMERA_HEIGHT)
 
     # Open/close the claw once on startup before the main loop.
     log.info("Startup collect...")

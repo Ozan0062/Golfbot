@@ -1,23 +1,7 @@
 """
-zone_calibration_tracker.py — per-zone EMA calibration for the GolfBot.
+Device the field into 4 quadrants around the centre.
 
-The field is divided into 4 quadrants around the field centre (ZONE_CENTER_PX).
-Each zone maintains its own px-per-rotation and deg-per-rotation (left / right)
-estimates, refined with EMA (alpha = 0.15) every time a drive or turn is
-measured while the robot stays inside a single zone.
-
-On import the module loads zone_calibration.json (if it exists) so a warm start
-is free.  Call save() to persist the current state.
-
-Zone numbering:
-
-    ┌────────┬────────┐
-    │ Zone 0 │ Zone 1 │
-    │  (TL)  │  (TR)  │
-    ├────────┼────────┤
-    │ Zone 2 │ Zone 3 │
-    │  (BL)  │  (BR)  │
-    └────────┴────────┘
+0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right.
 """
 
 import json
@@ -40,9 +24,6 @@ _ZONE_NAMES = {0: "TL", 1: "TR", 2: "BL", 3: "BR"}
 def get_zone(pos_px, center_px):
     """
     Return zone index 0-3 for a warped-pixel position.
-
-    0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right.
-    Returns None if pos_px is None.
     """
     if pos_px is None:
         return None
@@ -102,11 +83,11 @@ class ZoneCalibrationTracker:
     """
     Manages per-zone calibration data.
 
-    * ``update_drive(zone, measured)``  — refine px/rot for a zone.
-    * ``update_turn(zone, measured, direction)``  — refine deg/rot for a zone.
-    * ``get_px_per_rotation(pos_px)``  — zone-aware px/rot lookup.
-    * ``get_deg_per_rotation(pos_px, direction)``  — zone-aware deg/rot lookup.
-    * ``save()`` / ``load()`` — JSON round-trip.
+    * ``update_drive(zone, measured)``  - refine px/rot for a zone.
+    * ``update_turn(zone, measured, direction)``  - refine deg/rot for a zone.
+    * ``get_px_per_rotation(pos_px)``  - zone-aware px/rot lookup.
+    * ``get_deg_per_rotation(pos_px, direction)``  - zone-aware deg/rot lookup.
+    * ``save()`` / ``load()`` - JSON round-trip.
 
     When a zone has zero samples it returns the global config fallback.
     """
@@ -132,7 +113,7 @@ class ZoneCalibrationTracker:
         zd = self.zones[zone]
         zd.px_per_rot = ALPHA * measured + (1 - ALPHA) * zd.px_per_rot
         zd.samples_drive += 1
-        log.debug("zone %d (%s) drive → %.2f px/rot  (n=%d)",
+        log.debug("zone %d (%s) drive -> %.2f px/rot  (n=%d)",
                   zone, _ZONE_NAMES[zone], zd.px_per_rot, zd.samples_drive)
 
     def update_turn(self, zone, measured, direction):
@@ -146,12 +127,12 @@ class ZoneCalibrationTracker:
         if direction == "LEFT":
             zd.deg_per_rot_left = ALPHA * measured + (1 - ALPHA) * zd.deg_per_rot_left
             zd.samples_turn_left += 1
-            log.debug("zone %d (%s) turn L → %.2f deg/rot  (n=%d)",
+            log.debug("zone %d (%s) turn L -> %.2f deg/rot  (n=%d)",
                       zone, _ZONE_NAMES[zone], zd.deg_per_rot_left, zd.samples_turn_left)
         else:
             zd.deg_per_rot_right = ALPHA * measured + (1 - ALPHA) * zd.deg_per_rot_right
             zd.samples_turn_right += 1
-            log.debug("zone %d (%s) turn R → %.2f deg/rot  (n=%d)",
+            log.debug("zone %d (%s) turn R -> %.2f deg/rot  (n=%d)",
                       zone, _ZONE_NAMES[zone], zd.deg_per_rot_right, zd.samples_turn_right)
 
     # -- Lookups (with fallback) ----------------------------------------------
@@ -190,7 +171,7 @@ class ZoneCalibrationTracker:
     def load(self):
         """Load state from JSON (if the file exists)."""
         if not os.path.exists(self._path):
-            log.info("No zone calibration file found at %s — using defaults", self._path)
+            log.info("No zone calibration file found at %s - using defaults", self._path)
             return
         try:
             with open(self._path, "r", encoding="utf-8") as f:
@@ -208,7 +189,7 @@ class ZoneCalibrationTracker:
             total = sum(zd.samples_drive for zd in self.zones.values())
             log.info("Zone calibration loaded from %s  (%d total drive samples)", self._path, total)
         except Exception as exc:
-            log.warning("Failed to load zone calibration from %s: %s — using defaults", self._path, exc)
+            log.warning("Failed to load zone calibration from %s: %s - using defaults", self._path, exc)
 
     # -- Pretty-print ---------------------------------------------------------
 
@@ -228,7 +209,7 @@ class ZoneCalibrationTracker:
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton — created from config on first import
+# Module-level singleton - created from config on first import
 # ---------------------------------------------------------------------------
 
 def _create_tracker():

@@ -1,5 +1,5 @@
 """
-field_detect.py — live field-corner detection and warp preview.
+field_detect.py - live field-corner detection and warp preview.
 
 Run:  python -m scripts.field_detect
 Press 'w' to warp (saves warped_field.jpg), ESC to quit.

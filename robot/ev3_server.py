@@ -13,7 +13,7 @@ PORT = 5000
 gate = Gate(MediumMotor, OUTPUT_C)
 gate.setup()
 
-# ── gate calibration ──────────────────────────────────────────────────────────
+# --- gate calibration ---
 print("=== Gate calibration ===")
 print("  t <degrees>  - turn gate motor")
 print("  set          - set this as zero and start server")
@@ -35,7 +35,7 @@ while True:
         break
     else:
         print("  Unknown command.")
-# ─────────────────────────────────────────────────────────────────────────────
+# --- end gate calibration ---
 
 claw = Claw(MediumMotor, OUTPUT_B, gate)
 

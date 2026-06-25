@@ -1,9 +1,5 @@
 """
-calibration_tracker.py — EMA trackers for drive and turn calibration.
-
-Each tracker holds one ratio and updates it with new measurements using EMA.
-State machine owns the tracker instances; it passes measurements here after
-each blocking move.
+Trackers for drive and turn calibration.
 
 Alpha = 0.15
 """
@@ -38,15 +34,9 @@ calibration_angle_right = CalibrationTracker(DEGREES_PER_ROTATION_RIGHT)
 
 def save_calibration_to_config():
     """
-    Persist the current live calibration ratios back into config.py as the new
-    starting values, so the next run begins from what was learned this session.
     Called on ESC from main.py.
-
-    Only the three numeric literals are rewritten in place; every other line,
-    including the inline comments, is left untouched.
-
-    Also saves the zone calibration data to zone_calibration.json.
-
+    Current calibration written into config.py as the new starting values on new runs.
+    
     Returns (pixels_per_rotation, degrees_left, degrees_right).
     """
     new_values = {
@@ -65,7 +55,7 @@ def save_calibration_to_config():
         pattern = rf"^({re.escape(name)}\s*=\s*)[-+0-9.eE]+"
         text, count = re.subn(pattern, rf"\g<1>{value:.2f}", text, count=1, flags=re.M)
         if count == 0:
-            raise ValueError(f"{name} not found in {config_path} — calibration not saved")
+            raise ValueError(f"{name} not found in {config_path} - calibration not saved")
 
     with open(config_path, "w", encoding="utf-8") as f:
         f.write(text)

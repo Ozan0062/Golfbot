@@ -1,11 +1,11 @@
 """
-lens_calibration.py — camera lens-distortion calibration.
+lens_calibration.py - camera lens-distortion calibration.
 
 Workflow (run the tool from the repo root):
     1. Print a 9x6 inner-corner checkerboard.
-    2. python -m scripts.lens_calibration_tool capture    — capture 10-15 images
-    3. python -m scripts.lens_calibration_tool calibrate  — compute + save calibration
-    4. Done — main.py loads vision/calibration_data.npz and undistorts automatically.
+    2. python -m scripts.lens_calibration_tool capture    - capture 10-15 images
+    3. python -m scripts.lens_calibration_tool calibrate  - compute + save calibration
+    4. Done - main.py loads vision/calibration_data.npz and undistorts automatically.
 
 This module holds the calibration functions; the interactive CLI lives in
 scripts/lens_calibration_tool.py.
@@ -129,7 +129,7 @@ def load_calibration():
 
 
 def undistort(frame, mtx, dist):
-    """Apply lens distortion correction to a frame (slow — recomputes map every call)."""
+    """Apply lens distortion correction to a frame (slow - recomputes map every call)."""
     return cv2.undistort(frame, mtx, dist)
 
 

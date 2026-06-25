@@ -1,22 +1,11 @@
 """
-tracker.py — convert pixel detections to real-world cm coordinates.
+tracker.py - convert pixel detections to real-world cm coordinates.
 
-Full pipeline smoke test (camera → field → detect → cm coords):
+Full pipeline smoke test (camera -> field -> detect -> cm coords):
     python -m scripts.tracker_pipeline
 
-Coordinate system (cm):
-
-    (0,0) ────── X ──────→ (180,0)
-      │                        │
-      │                        │
-      Y      (90,60)           │
-      │        center          │
-      │                        │
-      ↓                        │
-    (0,120) ──────────── (180,120)
-
-Origin = top-left corner of the field.
-X increases rightward, Y increases downward.
+Coordinate system: origin (0,0) is the top-left corner of the field.
+X increases rightward, Y increases downward, both measured in cm.
 """
 
 import math
@@ -94,24 +83,14 @@ def detect_robot_pose_in_warped_coords(aruco_detector, raw_frame, homography_mat
 def correct_robot_height(center_px, cam_center_px, cam_h, marker_h,
                          warped_w, warped_h, field_w, field_h):
     """
-    Correct robot position for the QR marker sitting 18 cm above the floor.
+    Correct robot position for the QR marker sitting ~18 cm above the floor.
 
-    Geometry (side view):
-
-        Camera (C)
-        |╲
-        |  ╲          ← viewing angle α
-        H    ╲
-        |      ╲
-        |  18cm QR ← marker up high
-        |   |
-        ────┴──── floor
-     (312,303)  robot-base (what we want to find)
-
-    1. Convert displacement from camera-center to cm
-    2. Angle from vertical: α = atan(d / H)
-    3. Horizontal distance to QR 18 cm up: d_actual = (H − 18) · tan(α)
-    4. Scale displacement inward toward camera-center
+    The camera looks down at an angle, so a raised marker shows up shifted
+    outward from the point directly below the camera. We undo that shift:
+      1. Convert the marker's offset from the camera centre into cm.
+      2. Angle from vertical: alpha = atan(d / H).
+      3. Floor distance for a marker 18 cm up: d_actual = (H - 18) * tan(alpha).
+      4. Scale the offset back inward toward the camera centre.
     """
     if center_px is None or cam_h <= marker_h or cam_h <= 0:
         return center_px
@@ -145,8 +124,8 @@ def get_true_robot_pose(aruco_detector, raw_frame, homography_matrix,
                         field_w=FIELD_WIDTH_CM,
                         field_h=FIELD_HEIGHT_CM):
     """
-    Full pipeline: detect ArUco → project to warped coords → correct for
-    marker height → recompute angle from corrected points.
+    Full pipeline: detect ArUco -> project to warped coords -> correct for
+    marker height -> recompute angle from corrected points.
 
     Returns (center_px, angle_deg) or (None, None).
     """

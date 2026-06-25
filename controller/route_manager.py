@@ -14,8 +14,8 @@ log = get_logger(__name__)
 
 @dataclass
 class RouteTarget:
-    cm:      tuple   # world position in cm  — for angle maths
-    px:      tuple   # pixel position this frame — for drive distance
+    cm:      tuple   # world position in cm, used for angle maths
+    px:      tuple   # pixel position this frame, used for drive distance
     dist_px: float   # distance from robot_px to px
 
 
@@ -28,15 +28,13 @@ class RouteManager:
     # Public API
     # -------------------------------------------------------------------------
 
-    def get_target(self, robot_pos: tuple, robot_px: tuple, world) -> Optional[RouteTarget]: # Bruger de originale px koordinater taget fra 
-        """
-        Return the nearest RouteTarget, re-evaluated fresh each call.
-        """
+    def get_target(self, robot_pos: tuple, robot_px: tuple, world) -> Optional[RouteTarget]:
+        """Return the nearest RouteTarget, re-evaluated fresh each call."""
         white_balls, white_balls_px = _gather_white(world)
         orange_cm  = world.ob
         orange_px  = world.ob_px
 
-        # ── Phase 1: white balls — always pick the nearest one ───────────
+        # White balls first: pick the nearest one.
         if white_balls:
             idx = min(
                 range(len(white_balls)),
@@ -50,12 +48,12 @@ class RouteManager:
             log.debug("Nearest white ball: idx=%d  dist=%.0f px", idx, dist_px)
             return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
-        # ── Phase 2: orange ball (all whites collected) ──────────────────
+        # Once the whites are gone, go for the orange ball.
         if orange_cm is not None and orange_px is not None:
             target_cm = (orange_cm[0], orange_cm[1])
             target_px = (orange_px[0], orange_px[1])
             dist_px = _dist(robot_px, target_px) if robot_px else 0.0
-            log.info("All white balls collected — going for the orange ball")
+            log.info("All white balls collected, going for the orange ball")
             return RouteTarget(cm=target_cm, px=target_px, dist_px=dist_px)
 
         # Nothing left

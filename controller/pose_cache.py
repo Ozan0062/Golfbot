@@ -1,5 +1,5 @@
 """
-pose_cache.py — ArUco pose with timeout fallback.
+ArUco pose with timeout fallback.
 
 The camera can miss the ArUco marker for a frame or two.  PoseCache keeps the
 last valid reading and returns it until it goes stale (> POSE_TIMEOUT_S old).
@@ -26,8 +26,8 @@ SETTLE_S = 0.2  # After a blocking move, ignore ArUco readings for this long to 
 
 @dataclass
 class Pose:
-    pos:   tuple   # (x, y) in cm — used for angle/bearing maths
-    px:    tuple   # (x, y) in pixels — used for drive distance
+    pos:   tuple   # (x, y) in cm - used for angle/bearing maths
+    px:    tuple   # (x, y) in pixels - used for drive distance
     angle: float   # heading in degrees
 
 
@@ -54,12 +54,12 @@ class PoseCache:
         now = time.time()
 
         if now < self._valid_after:
-            log.debug("Settling — ignoring detection, %.0f ms left", (self._valid_after - now) * 1000)
+            log.debug("Settling - ignoring detection, %.0f ms left", (self._valid_after - now) * 1000)
             return None
 
         # First frame after settle window expires
         if self._pose is None and self._valid_after > 0:
-            log.debug("Settle complete — waiting for ArUco")
+            log.debug("Settle complete - waiting for ArUco")
             
         # Sets robot position in statemachine object/GolfbotController
         if world.robot is not None and world.robot_angle is not None: 
@@ -71,7 +71,7 @@ class PoseCache:
             )
             self._last_seen = now
             if was_empty:
-                log.debug("Fresh lock — angle=%.1f°  pos=%s  px=%s",
+                log.debug("Fresh lock - angle=%.1f°  pos=%s  px=%s",
                           self._pose.angle, self._pose.pos, self._pose.px)
 
         if self._pose is None:

@@ -1,5 +1,5 @@
 """
-Translates pixels and angles into motor rotations.
+Convert pixels and angles into motor rotations.
 Also contains the Driver class that sends commands to the robot.
 """
 

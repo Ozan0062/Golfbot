@@ -1,8 +1,8 @@
 """
-tracker_pipeline.py — full vision pipeline smoke test on one frame.
+tracker_pipeline.py - full vision pipeline smoke test on one frame.
 
 Run:  python -m scripts.tracker_pipeline
-Grabs one frame, runs field → detect → ArUco → cm conversion, prints results.
+Grabs one frame, runs field -> detect -> ArUco -> cm conversion, prints results.
 """
 
 import sys
@@ -51,7 +51,7 @@ def main():
 
     # Print results
     print(f"\n{'─' * 40}")
-    print(f"Field warped to {w}x{h} px → {FIELD_WIDTH_CM}x{FIELD_HEIGHT_CM} cm")
+    print(f"Field warped to {w}x{h} px -> {FIELD_WIDTH_CM}x{FIELD_HEIGHT_CM} cm")
     print(f"{'─' * 40}")
 
     if robot_cm:

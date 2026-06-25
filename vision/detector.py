@@ -1,5 +1,5 @@
 """
-detector.py — YOLO object detection (balls, cross) on the warped field image.
+detector.py - YOLO object detection (balls, cross) on the warped field image.
 
 Standalone test on a saved image:
     python -m scripts.detector_test warped_field.jpg
@@ -102,9 +102,9 @@ def draw_world_objects(img, world):
 
 # Colours are BGR (OpenCV order).
 _FONT = cv2.FONT_HERSHEY_SIMPLEX
-_C_TARGET   = (255,   0, 255)   # magenta — the ball we're going for
-_C_WAYPOINT = (245, 220,  30)   # cyan    — the waypoint we're driving to / will drive to
-_C_ROBOT    = (  0, 255, 255)   # yellow  — the robot
+_C_TARGET   = (255,   0, 255)   # magenta - the ball we're going for
+_C_WAYPOINT = (245, 220,  30)   # cyan    - the waypoint we're driving to / will drive to
+_C_ROBOT    = (  0, 255, 255)   # yellow  - the robot
 _C_TEXT     = (245, 245, 245)   # near-white text on the banner
 
 # What each state is doing, in plain language, plus the banner accent colour.
@@ -161,7 +161,7 @@ def _draw_state_banner(img, state_name, command_name):
 def _draw_staged_path(img, robot_center, avoid_target, next_waypoints, target_px):
     """
     Draw the waypoint the robot is driving to ("DRIVING TO") and the ones queued
-    after it ("THEN"), chained robot → current → next... → target.
+    after it ("THEN"), chained robot -> current -> next... -> target.
     """
     cur = (int(avoid_target[0]), int(avoid_target[1]))
 
@@ -177,12 +177,12 @@ def _draw_staged_path(img, robot_center, avoid_target, next_waypoints, target_px
     for a, b in zip(chain, chain[1:]):
         _dashed_line(img, a, b, _C_WAYPOINT, thickness=2)
 
-    # The waypoint being driven to now — filled dot + ring + label.
+    # The waypoint being driven to now - filled dot + ring + label.
     cv2.circle(img, cur, 7, _C_WAYPOINT, -1, cv2.LINE_AA)
     cv2.circle(img, cur, 15, _C_WAYPOINT, 2, cv2.LINE_AA)
     _label(img, "DRIVING TO", (cur[0] - 40, cur[1] - 20), _C_WAYPOINT, scale=0.5, thickness=1)
 
-    # The waypoints that come after — hollow dots labelled THEN 1, THEN 2, ...
+    # The waypoints that come after - hollow dots labelled THEN 1, THEN 2, ...
     for i, w in enumerate(next_waypoints or [], start=1):
         p = (int(w[0]), int(w[1]))
         cv2.circle(img, p, 11, _C_WAYPOINT, 2, cv2.LINE_AA)
@@ -207,7 +207,7 @@ def draw_debug_overlay(warped, detections, world, robot_center, robot_angle,
     Annotate the warped field for the live camera window.
 
     Shows, clearly: the current state + what the robot is doing (top banner),
-    the robot, the locked target ball, and — when navigating — the waypoint
+    the robot, the locked target ball, and - when navigating - the waypoint
     being driven to now ("DRIVING TO") plus the ones queued after it ("THEN").
 
     avoid_target / next_waypoints are optional (pixel coords in the warped
@@ -226,7 +226,7 @@ def draw_debug_overlay(warped, detections, world, robot_center, robot_angle,
         cv2.rectangle(debug, (tx - 20, ty - 20), (tx + 20, ty + 20), _C_TARGET, 2)
         _label(debug, "TARGET", (tx - 28, ty + 38), _C_TARGET, scale=0.5, thickness=1)
 
-        # Robot → target line + distance/heading readout (only useful with no waypoint detour).
+        # Robot -> target line + distance/heading readout (only useful with no waypoint detour).
         if robot_center is not None and robot_angle is not None and avoid_target is None:
             rx, ry = int(robot_center[0]), int(robot_center[1])
             cv2.rectangle(debug, (rx - 25, ry - 25), (rx + 25, ry + 25), _C_ROBOT, 2)

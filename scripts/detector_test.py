@@ -1,5 +1,5 @@
 """
-detector_test.py — run object detection on a saved image.
+detector_test.py - run object detection on a saved image.
 
 Run:  python -m scripts.detector_test <image_path>
 """

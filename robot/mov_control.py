@@ -1,5 +1,3 @@
-"""mov_control.py — drive/turn motor commands (runs on the EV3 brick)."""
-
 from ev3dev2.motor import MoveSteering, SpeedPercent, OUTPUT_A, OUTPUT_D
 
 # ---------------------------------------------------------------------------

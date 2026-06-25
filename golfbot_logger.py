@@ -13,7 +13,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-# ── Default configuration ─────────────────────────────────────────────────────
+# --- Default configuration ---
 
 DEFAULT_LEVEL   = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_DIR         = Path(__file__).parent / "logs"
@@ -34,12 +34,12 @@ _COLOURS = {
 _SETUP_DONE = False
 
 
-# ── Formatters ────────────────────────────────────────────────────────────────
+# --- Formatters ---
 
 class ColourFormatter(logging.Formatter):
     """Adds ANSI colour to the level name in console output."""
 
-    FMT = "%(asctime)s  %(levelname)-8s  %(name)s — %(message)s"
+    FMT = "%(asctime)s  %(levelname)-8s  %(name)s - %(message)s"
     DATEFMT = "%H:%M:%S"
 
     def format(self, record: logging.LogRecord) -> str:
@@ -50,12 +50,12 @@ class ColourFormatter(logging.Formatter):
 
 
 _PLAIN_FMT = logging.Formatter(
-    fmt     = "%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+    fmt     = "%(asctime)s  %(levelname)-8s  %(name)s - %(message)s",
     datefmt = "%Y-%m-%d %H:%M:%S",
 )
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# --- Public API ---
 
 def setup_logging(
     level:       str  = DEFAULT_LEVEL,
@@ -75,7 +75,7 @@ def setup_logging(
     ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(level)
     ch.setFormatter(ColourFormatter(
-        fmt="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+        fmt="%(asctime)s  %(levelname)-8s  %(name)s - %(message)s",
         datefmt="%H:%M:%S",
     ) if colour else _PLAIN_FMT)
     root.addHandler(ch)
@@ -94,7 +94,7 @@ def setup_logging(
         fh.setFormatter(_PLAIN_FMT)
         root.addHandler(fh)
         # Log the path so the user knows where to look
-        logging.getLogger(__name__).info("Log file → %s", log_path.resolve())
+        logging.getLogger(__name__).info("Log file -> %s", log_path.resolve())
 
     # Silence noisy third-party libraries
     for noisy in ("ultralytics", "onnxruntime"):

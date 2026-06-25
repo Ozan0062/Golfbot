@@ -1,5 +1,5 @@
 """
-camera.py — capture frames from the overhead USB camera.
+camera.py - capture frames from the overhead USB camera.
 
 Standalone capture tool (save training images):
     python -m scripts.camera_capture

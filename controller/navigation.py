@@ -113,7 +113,7 @@ def cross_approach_angle(ball_px, cross_px):
     """Find the best diagonal angle to approach a ball at the center cross."""
     dx = ball_px[0] - cross_px[0]
     dy = ball_px[1] - cross_px[1]
-    raw = math.degrees(math.atan2(dy, dx))   # direction cross→ball
+    raw = math.degrees(math.atan2(dy, dx))   # direction from cross to ball
     approach = raw + 180.0                   # robot faces the opposite way
     # Snap only to the diagonals: 45, 135, -45, -135 (gaps between cross legs)
     snapped = round((approach - 45.0) / 90.0) * 90.0 + 45.0

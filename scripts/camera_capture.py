@@ -1,5 +1,5 @@
 """
-camera_capture.py — capture training images from the overhead camera.
+camera_capture.py - capture training images from the overhead camera.
 
 Run:  python -m scripts.camera_capture
 Press SPACE to capture, ESC to quit. Saves to images-robot/, continuing the count.

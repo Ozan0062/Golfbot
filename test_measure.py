@@ -38,11 +38,12 @@ from config import (
     ROBOT_MARKER_HEIGHT_CM,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
     WARPED_WIDTH,
-    MARKER_TO_CLAW_CM, CLAW_HEIGHT_CM,
+    MARKER_TO_CLAW_CM,
 )
 
 # ── Physical measurements ─────────────────────────────────────────────────────
 BALL_HEIGHT_CM = 0.0    # golf ball parallax correction (negligible)
+CLAW_HEIGHT_CM = 7.5    # claw tip height above the floor (info only)
 
 PX_PER_CM         = WARPED_WIDTH / FIELD_WIDTH_CM          # 5.0 px/cm
 MARKER_TO_CLAW_PX = MARKER_TO_CLAW_CM * PX_PER_CM

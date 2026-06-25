@@ -1,8 +1,3 @@
-"""
-The main state machine that controls the robot's behavior.
-Decides what to do next based on camera data.
-"""
-
 from enum import Enum, auto
 import math
 import time
@@ -25,7 +20,7 @@ from controller.pose_cache import PoseCache
 from controller.route_manager import RouteManager
 from controller.nearest import find_nearest
 from config import (
-    GOAL_LINEUP_ARRIVE_PX, GOAL_LINEUP_PX, GOAL_POSITION_CM, GOAL_POSITION_PX,
+    GOAL_POSITION_CM, GOAL_POSITION_PX,
     GOAL_RELEASE_MARKER_PX, WARPED_WIDTH, WARPED_HEIGHT,
     GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_LANE_TOL_PX,
     GOAL_RELEASE_HEADING_TOL_DEG, GOAL_RELEASE_MAX_DRIVE_PX,
@@ -33,8 +28,8 @@ from config import (
     GOAL_LANE_MAX_REJECTIONS, GOAL_LANE_RECOVERY_REVERSE_ROTATIONS,
     FIELD_WIDTH_CM, FIELD_HEIGHT_CM,
     ALIGN_THRESHOLD_DEG, COLLECT_RADIUS_CM, MAX_DRIVE_PX, REVERSE_ROTATIONS,
-    GOAL_HEADING_DEG, GOAL_HEADING_TOL_DEG,
-    CROSS_CLEARANCE_PX, AVOID_WAYPOINT_DIST_PX, AVOID_ARRIVE_PX,
+    GOAL_HEADING_DEG,
+    CROSS_CLEARANCE_PX, AVOID_ARRIVE_PX,
     WALL_MARGIN_PX, CORNER_STAGE_DISTANCES_PX,
     FIELD_EDGE_MARGIN_PX, GOAL_APPROACH_ANGLE_DEG,
     MARKER_TO_CLAW_CM, CROSS_RADIUS_PX, ROBOT_FILTER_RADIUS_PX,
@@ -98,7 +93,7 @@ class GolfBotController:
         self.approach_calls         = 0
 
         log.info(
-            "Controller ready — goal at %s cm | calibration: turn L %.1f / R %.1f deg-per-rot, drive %.1f px-per-rot",
+            "Controller ready, goal at %s cm | calibration: turn L %.1f / R %.1f deg-per-rot, drive %.1f px-per-rot",
             GOAL_POSITION_CM, calibration_angle_left.ratio,
             calibration_angle_right.ratio, calibration_pixels.ratio,
         )
@@ -111,7 +106,7 @@ class GolfBotController:
         pose = self._pose.update(world)
         if pose is None:
             if self._pose_ok:
-                log.warning("Robot pose lost (ArUco marker not detected) — holding")
+                log.warning("Robot pose lost (ArUco marker not detected), holding")
                 self._pose_ok = False
             return Command.STOP
         if not self._pose_ok:
@@ -132,14 +127,14 @@ class GolfBotController:
             self._locked_target = self._route.get_target_nearest(target_dict, pose.px, world)
         
         if self._locked_target is None:
-            log.info("No balls in view — backing up to rescan")
+            log.info("No balls in view, backing up to rescan")
             self._reset_targeting()
             self._has_reversed = False
             self._transition(State.REVERSE_WHITE)
             return Command.STOP
 
         target = self._locked_target
-        log.info("Target locked — ball at (%.0f, %.0f) px", target.px[0], target.px[1])
+        log.info("Target locked, ball at (%.0f, %.0f) px", target.px[0], target.px[1])
 
         # Ball is way too close to the robot marker. Probably a bad detection or ball we just grabbed.
         # Ignore it and try again.
@@ -147,7 +142,7 @@ class GolfBotController:
             skip_radius = ROBOT_FILTER_RADIUS_PX / 5
             dist_to_target = math.hypot(target.px[0] - pose.px[0], target.px[1] - pose.px[1])
             if dist_to_target < skip_radius:
-                log.info("Target only %.0f px away (< %.0f) — skipping to the next target",
+                log.info("Target only %.0f px away (< %.0f), skipping to the next target",
                          dist_to_target, skip_radius)
                 self._skipped_target_px.append((target.px[0], target.px[1]))
                 self._reset_targeting()
@@ -170,82 +165,27 @@ class GolfBotController:
             self._transition(self._begin_staged_approach(pose, target, walls, zone, world))
             return Command.STOP
 
-        # 4. Open field — go straight to it.
+        # 4. Open field, go straight to it.
         self._reset_targeting()
         self._is_wall_ball = False
         self._transition(State.APPROACH)
         return Command.STOP
 
     def _cross_blocks_path(self, pose, target, world) -> bool:
-        """Plan a route around the center cross if it's in the way."""
+        """If the cross is between us and the target, plan a route around it."""
         cross_px = world.cross_px
         if cross_px is None:
             return False
 
         direct_clear, _ = path_is_clear(pose.px, target.px, [cross_px], CROSS_CLEARANCE_PX)
         if direct_clear:
-            log.debug("Cross check: direct path (%.0f,%.0f)→(%.0f,%.0f) is clear",
-                      pose.px[0], pose.px[1], target.px[0], target.px[1])
             return False
 
-        log.info("Cross BLOCKS path — robot=(%.0f,%.0f) target=(%.0f,%.0f) cross=(%.0f,%.0f) clearance=%dpx",
-                 pose.px[0], pose.px[1], target.px[0], target.px[1],
-                 cross_px[0], cross_px[1], CROSS_CLEARANCE_PX)
-
-        # Use the 4 fixed avoid points (midpoint between cross and each wall).
-        avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
-        avoid_pts = list(avoid_map.values())
-        label_map = {0: "right", 45: "down-right", 90: "down", 135: "down-left",
-                     180: "left", 225: "up-left", 270: "up", 315: "up-right"}
-        log.debug("Avoid points: %s",
-                  "  ".join(f"{label_map[k]}=(%.0f,%.0f)" % v for k, v in avoid_map.items()))
-
-        def is_clear(a, b):
-            ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
-            return ok
-
-        def dist(a, b):
-            return math.hypot(a[0] - b[0], a[1] - b[1])
-
-        # Try single-point routes: robot → pt → target.
-        route = None
-        for i, (k, pt) in enumerate(avoid_map.items()):
-            r2pt   = is_clear(pose.px, pt)
-            pt2tgt = is_clear(pt, target.px)
-            log.debug("  %s (%.0f,%.0f): robot→pt=%s  pt→target=%s",
-                      label_map[k], pt[0], pt[1],
-                      "OK" if r2pt else "BLOCKED",
-                      "OK" if pt2tgt else "BLOCKED")
-
-        single = [pt for pt in avoid_pts if is_clear(pt, target.px)]
-        single.sort(key=lambda pt: dist(pose.px, pt))
-        for pt in single:
-            if is_clear(pose.px, pt):
-                route = [pt]
-                log.info("Cross blocks path — single-point route via (%.0f,%.0f)", pt[0], pt[1])
-                break
-
-        # Try two-point routes: robot → pt1 → pt2 → target.
+        log.info("Cross blocks path to target (%.0f,%.0f), planning a detour",
+                 target.px[0], target.px[1])
+        route = self._cross_detour(pose.px, target.px, cross_px)
         if route is None:
-            log.debug("No single-point route found — trying two-point routes")
-            pairs = [
-                (pt1, pt2)
-                for pt1 in avoid_pts for pt2 in avoid_pts
-                if pt1 is not pt2
-                and is_clear(pose.px, pt1)
-                and is_clear(pt1, pt2)
-                and is_clear(pt2, target.px)
-            ]
-            if pairs:
-                pt1, pt2 = min(pairs, key=lambda p: dist(pose.px, p[0]) + dist(p[0], p[1]))
-                route = [pt1, pt2]
-                log.info("Cross blocks path — two-point route (%.0f,%.0f)→(%.0f,%.0f)",
-                         pt1[0], pt1[1], pt2[0], pt2[1])
-            else:
-                log.debug("  No valid two-point pairs found either")
-
-        if route is None:
-            log.warning("Cross blocks path but no avoid route found — proceeding anyway")
+            log.warning("Cross blocks path but no clear detour found, proceeding anyway")
             return False
 
         self._avoid_target          = route[0]
@@ -255,10 +195,37 @@ class GolfBotController:
         self._transition(State.AVOID)
         return True
 
+    def _cross_detour(self, start_px, dest_px, cross_px):
+        """
+        Waypoints from start to dest that stay clear of the cross, or None.
+        Tries the 4 fixed avoid points (one between the cross and each wall):
+        first a single-point detour, then a two-point one.
+        """
+        avoid_pts = list(cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT).values())
+
+        def clear(a, b):
+            ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
+            return ok
+
+        def dist(a, b):
+            return math.hypot(a[0] - b[0], a[1] - b[1])
+
+        # start -> pt -> dest, pick the nearest avoid point that works
+        for pt in sorted((p for p in avoid_pts if clear(p, dest_px)), key=lambda p: dist(start_px, p)):
+            if clear(start_px, pt):
+                return [pt]
+
+        # start -> p1 -> p2 -> dest, pick the shortest two-hop route
+        pairs = [(p1, p2) for p1 in avoid_pts for p2 in avoid_pts
+                 if p1 is not p2 and clear(start_px, p1) and clear(p1, p2) and clear(p2, dest_px)]
+        if pairs:
+            return list(min(pairs, key=lambda p: dist(start_px, p[0]) + dist(p[0], p[1])))
+        return None
+
     def _begin_staged_approach(self, pose, target, walls, zone, world=None) -> State:
         angle = wall_approach_angle(walls)
         if angle is None:
-            log.warning("No usable wall angle for zone=%s — skipping staging", zone)
+            log.warning("No usable wall angle for zone=%s, skipping staging", zone)
             return State.APPROACH
         return self._stage_along_angle(pose, target, angle, zone, world)
 
@@ -278,8 +245,8 @@ class GolfBotController:
         self._is_wall_ball = True
         dx = target.px[0] - cross_px[0]
         dy = target.px[1] - cross_px[1]
-        log.info("Ball at the cross (%.0f px away, r=%.0f) — cross=(%.0f,%.0f) ball=(%.0f,%.0f) "
-                 "dx=%.0f dy=%.0f → approach=%.0f°",
+        log.info("Ball at the cross (%.0f px away, r=%.0f), cross=(%.0f,%.0f) ball=(%.0f,%.0f) "
+                 "dx=%.0f dy=%.0f -> approach=%.0f°",
                  dist, radius, cross_px[0], cross_px[1], target.px[0], target.px[1],
                  dx, dy, angle)
         self._transition(self._stage_along_angle(pose, target, angle, "cross", world))
@@ -299,7 +266,7 @@ class GolfBotController:
             )
             if safe_final_stage != waypoints[-1]:
                 log.info(
-                    "Cross blocks final wall approach — moving final staging point from (%.0f,%.0f) to (%.0f,%.0f)",
+                    "Cross blocks final wall approach, moving final staging point from (%.0f,%.0f) to (%.0f,%.0f)",
                     waypoints[-1][0], waypoints[-1][1],
                     safe_final_stage[0], safe_final_stage[1],
                 )
@@ -309,68 +276,29 @@ class GolfBotController:
         self._corner_waypoints      = waypoints[1:]
         # Save the approach angle so we can align before driving in.
         self._corner_approach_angle = px_angle_to_cm(approach_angle)
-        log.info("%s ball — approaching via %d staging point(s)", label.capitalize(), len(waypoints))
+        log.info("%s ball, approaching via %d staging point(s)", label.capitalize(), len(waypoints))
         log.debug("staging path: %s",
                   "  ->  ".join(f"({w[0]:.0f},{w[1]:.0f})" for w in waypoints))
 
-        # Check if we need to dodge the cross to get to our staging point.
+        # Dodge the cross if it blocks the way to the first staging point.
         if cross_px is not None:
             staging_pt = self._avoid_target
             staging_clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
-            log.debug("Stage cross check: robot=(%.0f,%.0f) → staging=(%.0f,%.0f) = %s",
-                      pose.px[0], pose.px[1], staging_pt[0], staging_pt[1],
-                      "clear" if staging_clear else "BLOCKED")
             if not staging_clear:
-                avoid_map = cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT)
-                avoid_pts = list(avoid_map.values())
-
-                def _clr(a, b):
-                    ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
-                    return ok
-
-                def _dst(a, b):
-                    return math.hypot(a[0] - b[0], a[1] - b[1])
-
-                # Try single avoid point: robot → pt → staging.
-                route = None
-                single = [pt for pt in avoid_pts if _clr(pt, staging_pt)]
-                single.sort(key=lambda pt: _dst(pose.px, pt))
-                for pt in single:
-                    if _clr(pose.px, pt):
-                        route = [pt]
-                        log.info("Cross blocks staging — single avoid point (%.0f,%.0f) → staging=(%.0f,%.0f)",
-                                 pt[0], pt[1], staging_pt[0], staging_pt[1])
-                        break
-
-                # Try two avoid points: robot → pt1 → pt2 → staging.
-                if route is None:
-                    pairs = [
-                        (pt1, pt2)
-                        for pt1 in avoid_pts for pt2 in avoid_pts
-                        if pt1 is not pt2
-                        and _clr(pose.px, pt1)
-                        and _clr(pt1, pt2)
-                        and _clr(pt2, staging_pt)
-                    ]
-                    if pairs:
-                        pt1, pt2 = min(pairs, key=lambda p: _dst(pose.px, p[0]) + _dst(p[0], p[1]))
-                        route = [pt1, pt2]
-                        log.info("Cross blocks staging — two avoid points (%.0f,%.0f)→(%.0f,%.0f) → staging=(%.0f,%.0f)",
-                                 pt1[0], pt1[1], pt2[0], pt2[1], staging_pt[0], staging_pt[1])
-
+                route = self._cross_detour(pose.px, staging_pt, cross_px)
+                # The old staging point becomes the next waypoint after the detour.
+                self._corner_waypoints.insert(0, staging_pt)
                 if route is not None:
-                    self._corner_waypoints.insert(0, staging_pt)
                     self._avoid_target = route[0]
                     for extra in reversed(route[1:]):
                         self._corner_waypoints.insert(0, extra)
+                    log.info("Cross blocks staging, detouring via %d point(s)", len(route))
                 else:
-                    escape = min(avoid_pts, key=lambda pt: _dst(pose.px, pt))
-                    self._corner_waypoints.insert(0, staging_pt)
+                    escape = min(cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT).values(),
+                                 key=lambda pt: math.hypot(pt[0] - pose.px[0], pt[1] - pose.px[1]))
                     self._avoid_target = escape
-                    log.warning(
-                        "Cross blocks staging and no fully clear route was found — escaping via avoid point (%.0f,%.0f)",
-                        escape[0], escape[1],
-                    )
+                    log.warning("Cross blocks staging and no clear detour found, escaping via (%.0f,%.0f)",
+                                escape[0], escape[1])
 
         return State.AVOID
 
@@ -390,7 +318,7 @@ class GolfBotController:
                 return candidate
 
         log.warning(
-            "Cross blocks final wall approach and no safe staging point was found — keeping original staging point"
+            "Cross blocks final wall approach and no safe staging point was found, keeping original staging point"
         )
         return stage_px
 
@@ -400,7 +328,7 @@ class GolfBotController:
         """Drive to the current waypoint; on arrival advance the plan."""
         wp = self._avoid_target
         if wp is None:
-            log.warning("AVOID entered with no waypoint — falling back to SEEK")
+            log.warning("AVOID entered with no waypoint, falling back to SEEK")
             self._transition(State.SEEK)
             return Command.STOP
 
@@ -412,14 +340,14 @@ class GolfBotController:
 
     def _waypoint_reached(self, pose) -> Command:
         """Decide what to do once the robot reaches the current AVOID waypoint."""
-        # More staging points queued → head to the next one.
+        # More staging points queued -> head to the next one.
         if self._corner_waypoints:
             self._avoid_target = self._corner_waypoints.pop(0)
             log.info("Advancing to next waypoint (%.0f, %.0f), %d remaining",
                      self._avoid_target[0], self._avoid_target[1], len(self._corner_waypoints))
             return Command.STOP
 
-        # Staged approach finished → align to the approach heading, then head straight in.
+        # Staged approach finished -> align to the approach heading, then head straight in.
         if self._is_wall_ball:
             if self._corner_approach_angle is not None:
                 heading_err = angle_error(pose.angle, self._corner_approach_angle)
@@ -428,30 +356,30 @@ class GolfBotController:
                     rotations = angle_to_rotations(heading_err, pos_px=pose.px)
                     log.debug("Pre-approach align %.1f° %s", abs(heading_err), direction.name)
                     self._driver.turn(pose, rotations, direction)
-            log.debug("Staging complete — heading in to the ball")
+            log.debug("Staging complete, heading in to the ball")
             self._corner_approach_angle = None
             self._avoid_target = None
-            log.info("Staging complete — transitioning to APPROACH")
+            log.info("Staging complete, transitioning to APPROACH")
             self._transition(State.APPROACH)
             return Command.STOP
 
-        # Cross dodge finished → re-plan from the new position.
-        log.info("Reached dodge waypoint — re-checking the path")
+        # Cross dodge finished -> re-plan from the new position.
+        log.info("Reached dodge waypoint, re-checking the path")
         self._avoid_target = None
         self._transition(State.SEEK)
         return Command.STOP
 
-    # Turn to face the ball and drive toward it.
-    # Make sure were pointed perfectly at it before grabbing.
-
     def _approach(self, pose, world) -> Command:
-        self.approach_calls +=1
-        
-        if self.approach_calls == 5: # Makes sure
+        # Turn to face the ball, drive in, and only grab once we're lined up.
+        self.approach_calls += 1
+
+        # Safety bail-out: if we've been stuck approaching too long, drop the
+        # target and look for another ball.
+        if self.approach_calls == 5:
             self._locked_target = None
             self._transition(State.SEEK)
-            return
-        
+            return Command.STOP
+
         target = self._locked_target
         if target is None:
             self._transition(State.SEEK)
@@ -473,12 +401,12 @@ class GolfBotController:
             heading_error = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
             if abs(heading_error) > ALIGN_THRESHOLD_DEG:
                 direction = Command.RIGHT if heading_error > 0 else Command.LEFT
-                log.debug("Claw short (%.1f cm) and off-heading (%.1f°) — turning %s",
+                log.debug("Claw short (%.1f cm) and off-heading (%.1f°), turning %s",
                           off, heading_error, direction.name)
                 self._driver.turn(pose, angle_to_rotations(heading_error, pos_px=pose.px), direction)
                 return direction
             nudge_px = (off - COLLECT_RADIUS_CM) * _PX_PER_CM_MIN
-            log.debug("Claw short by %.1f cm — nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
+            log.debug("Claw short by %.1f cm, nudging in %.0f px", off - COLLECT_RADIUS_CM, nudge_px)
             self._driver.drive(pose, px_to_rotations(nudge_px, pos_px=pose.px))
             return Command.FORWARD
 
@@ -486,7 +414,7 @@ class GolfBotController:
         heading_error = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
             direction = Command.RIGHT if heading_error > 0 else Command.LEFT
-            log.debug("At the ball but off-heading (%.1f°) — turning %s", heading_error, direction.name)
+            log.debug("At the ball but off-heading (%.1f°), turning %s", heading_error, direction.name)
             self._driver.turn(pose, angle_to_rotations(heading_error, pos_px=pose.px), direction)
             return direction
 
@@ -507,7 +435,7 @@ class GolfBotController:
 
         zone, walls = classify_zone(target.px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
         log.info(
-            "Cross blocks live approach path — robot=(%.0f,%.0f) target=(%.0f,%.0f); re-planning before driving",
+            "Cross blocks live approach path, robot=(%.0f,%.0f) target=(%.0f,%.0f); re-planning before driving",
             pose.px[0], pose.px[1], target.px[0], target.px[1],
         )
         if zone in ("wall", "corner"):
@@ -525,11 +453,11 @@ class GolfBotController:
         dy      = claw[1] - target.cm[1]
         deg_off = angle_error(pose.angle, angle_to_target(pose.pos, target.cm))
         log.debug(
-            "Collecting — claw=(%.0f,%.0f) ball=(%.0f,%.0f) Δx=%.1f Δy=%.1f cm, %.1f° off",
+            "Collecting, claw=(%.0f,%.0f) ball=(%.0f,%.0f) dx=%.1f dy=%.1f cm, %.1f° off",
             claw[0], claw[1], target.cm[0], target.cm[1], dx, dy, deg_off,
         )
         log.info("Collected ball")
-        self._delivered = False   # new load on board — deliver it before finishing
+        self._delivered = False   # new load on board, deliver it before finishing
         self._locked_target = None
         self._skipped_target_px = []
         self._route.advance()
@@ -537,7 +465,7 @@ class GolfBotController:
         self._pose.invalidate()
 
         if self._is_wall_ball:                  # back off so we don't shove the ball into the wall
-            log.info("Wall/corner ball — backing off")
+            log.info("Wall/corner ball, backing off")
             self._driver.reverse(REVERSE_ROTATIONS)
             self._is_wall_ball = False
         
@@ -557,9 +485,9 @@ class GolfBotController:
                                     next_if_empty=State.REVERSE_ORANGE)
 
     def _reverse_orange(self, pose, world) -> Command:
-        # After a delivery, an empty rescan means no balls are left anywhere —
-        # the mission is done. Before the first delivery, an empty rescan means
-        # the claw is full and it's time to head for the goal.
+        # After a delivery, an empty rescan means no balls are left anywhere,
+        # so we're done. Before the first delivery, an empty rescan means the
+        # claw is full and it's time to head for the goal.
         next_if_empty = State.DONE if self._delivered else State.DRIVE_GOAL
         return self._handle_reverse(world, scan_for=("ob",),
                                     next_if_found=State.SEEK,
@@ -589,7 +517,7 @@ class GolfBotController:
             zone, walls = classify_zone(GOAL_POSITION_PX, WALL_MARGIN_PX,
                                         WARPED_WIDTH, WARPED_HEIGHT)
             angle = wall_approach_angle(walls)
-            if angle is None:                   # goal not near a wall — drive straight in
+            if angle is None:                   # goal not near a wall, drive straight in
                 angle = GOAL_APPROACH_ANGLE_DEG
             self._goal_approach_angle = px_angle_to_cm(angle)
 
@@ -599,34 +527,19 @@ class GolfBotController:
                 WARPED_WIDTH, WARPED_HEIGHT, FIELD_EDGE_MARGIN_PX,
             ))
 
-            # Dodge cross if it's in the way.
+            # Dodge the cross if it blocks the first staging point.
             cross_px = world.cross_px
             if cross_px is not None and self._goal_waypoints:
                 staging_pt = self._goal_waypoints[0]
                 clear, _ = path_is_clear(pose.px, staging_pt, [cross_px], CROSS_CLEARANCE_PX)
                 if not clear:
-                    avoid_pts = list(cross_avoid_points(cross_px, WARPED_WIDTH, WARPED_HEIGHT).values())
-
-                    def _clr(a, b):
-                        ok, _ = path_is_clear(a, b, [cross_px], CROSS_CLEARANCE_PX)
-                        return ok
-
-                    single = sorted([pt for pt in avoid_pts if _clr(pose.px, pt) and _clr(pt, staging_pt)],
-                                    key=lambda p: math.hypot(p[0] - pose.px[0], p[1] - pose.px[1]))
-                    if single:
-                        self._goal_waypoints.insert(0, single[0])
-                        log.info("Goal: cross blocks approach — avoid via (%.0f,%.0f)", single[0][0], single[0][1])
+                    route = self._cross_detour(pose.px, staging_pt, cross_px)
+                    if route is not None:
+                        self._goal_waypoints[:0] = route
+                        log.info("Goal: cross blocks approach, detouring via %d point(s)", len(route))
                     else:
-                        pairs = [(p1, p2) for p1 in avoid_pts for p2 in avoid_pts
-                                 if p1 is not p2 and _clr(pose.px, p1) and _clr(p1, p2) and _clr(p2, staging_pt)]
-                        if pairs:
-                            p1, p2 = min(pairs, key=lambda p: math.hypot(p[0][0]-pose.px[0], p[0][1]-pose.px[1]))
-                            self._goal_waypoints[:0] = [p1, p2]
-                            log.info("Goal: cross blocks approach — avoid via (%.0f,%.0f)→(%.0f,%.0f)",
-                                     p1[0], p1[1], p2[0], p2[1])
-                        else:
-                            log.warning("Goal: cross blocks approach but no avoid route found — proceeding anyway")
-            log.info("Driving to goal %s like a wall ball — %d staging point(s)",
+                        log.warning("Goal: cross blocks approach but no clear detour found, proceeding anyway")
+            log.info("Driving to goal %s like a wall ball, %d staging point(s)",
                      GOAL_POSITION_PX,
                      len(self._goal_waypoints))
             self._goal_heading_corrections = 0
@@ -682,15 +595,15 @@ class GolfBotController:
         if release_remaining_px < -GOAL_RELEASE_X_TOL_PX:
             reverse_px = min(abs(release_remaining_px) - GOAL_RELEASE_X_TOL_PX, GOAL_RELEASE_MAX_DRIVE_PX)
             log.info(
-                "Goal release pose rejected — marker x %.1f overshot release x %.1f; backing up %.1f px",
+                "Goal release pose rejected, marker x %.1f overshot release x %.1f; backing up %.1f px",
                 pose.px[0], GOAL_RELEASE_MARKER_PX[0], reverse_px,
             )
             self._driver.reverse(px_to_rotations(reverse_px))
             return Command.BACKWARD
 
-        # Marker is at the release coordinate and heading is confirmed — release.
+        # Marker is at the release coordinate and heading is confirmed, release.
         log.info(
-            "At goal release pose — marker=(%.1f, %.1f), heading %.1f°; releasing",
+            "At goal release pose, marker=(%.1f, %.1f), heading %.1f°; releasing",
             pose.px[0], pose.px[1], pose.angle,
         )
         self._goal_waypoints = None
@@ -703,7 +616,7 @@ class GolfBotController:
     # --- State: RELEASE / DONE -----------------------------------------------
 
     def _release_balls(self, pose, world) -> Command:
-        log.info("Releasing — robot at (%.1f, %.1f) cm, heading %.1f°",
+        log.info("Releasing, robot at (%.1f, %.1f) cm, heading %.1f°",
                  pose.pos[0], pose.pos[1], pose.angle)
         robot.gate_open()
         time.sleep(3)
@@ -711,7 +624,7 @@ class GolfBotController:
         # Back up and check if any new balls showed up while we were delivering.
         self._delivered = True
         self._has_reversed = False
-        log.info("Balls released — backing up to rescan for new balls")
+        log.info("Balls released, backing up to rescan for new balls")
         self._transition(State.REVERSE_WHITE)
         return Command.RELEASE
 
@@ -732,7 +645,7 @@ class GolfBotController:
             return False
 
         log.info(
-            "Goal %s heading still off after %d corrections — marker=(%.1f, %.1f), heading %.1f°, error %.1f°; reversing and rebuilding lineup",
+            "Goal %s heading still off after %d corrections, marker=(%.1f, %.1f), heading %.1f°, error %.1f°; reversing and rebuilding lineup",
             phase, self._goal_heading_corrections, pose.px[0], pose.px[1],
             pose.angle, heading_err,
         )
@@ -746,14 +659,14 @@ class GolfBotController:
         self._goal_lane_rejections += 1
         if self._goal_lane_rejections <= GOAL_LANE_MAX_REJECTIONS:
             log.info(
-                "Goal release pose rejected — marker y %.1f is %.1f px off lane %.1f; rebuilding lineup",
+                "Goal release pose rejected, marker y %.1f is %.1f px off lane %.1f; rebuilding lineup",
                 pose.px[1], lane_err, GOAL_RELEASE_MARKER_PX[1],
             )
             self._goal_waypoints = None
             return False
 
         log.info(
-            "Goal release lane still off after %d rebuilds — marker=(%.1f, %.1f), lane error %.1f px; reversing and rebuilding from farther out",
+            "Goal release lane still off after %d rebuilds, marker=(%.1f, %.1f), lane error %.1f px; reversing and rebuilding from farther out",
             self._goal_lane_rejections, pose.px[0], pose.px[1], lane_err,
         )
         self._driver.reverse(GOAL_LANE_RECOVERY_REVERSE_ROTATIONS)

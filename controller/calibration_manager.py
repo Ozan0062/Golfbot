@@ -11,7 +11,6 @@ cal.consume(pose.px, pose.angle)
 
 from controller.drive_calibration import measure_pixels_per_rotation, measure_degrees_per_rotation
 from controller.calibration_tracker import calibration_pixels, calibration_angle_left, calibration_angle_right
-from controller.zone_calibration_tracker import zone_tracker, get_zone
 from golfbot_logger import get_logger
 
 log = get_logger(__name__)
@@ -53,11 +52,6 @@ class CalibrationManager:
                     # Global tracker
                     calibration_pixels.update(measured)
                     log.debug("calibrated px/rot -> %.2f", calibration_pixels.ratio)
-                    # Zone tracker - only if start and end are in the same zone
-                    start_zone = get_zone(start_px, zone_tracker.center_px)
-                    end_zone   = get_zone(robot_px, zone_tracker.center_px)
-                    if start_zone is not None and start_zone == end_zone:
-                        zone_tracker.update_drive(start_zone, measured)
 
         if self._pending_turn is not None and robot_angle is not None:
             start_angle, rotations, direction = self._pending_turn
@@ -68,8 +62,3 @@ class CalibrationManager:
                 tracker = calibration_angle_left if direction == "LEFT" else calibration_angle_right
                 tracker.update(measured)
                 log.debug("calibrated deg/rot %s -> %.2f", direction, tracker.ratio)
-                # Zone tracker - turns stay in-place, so use the current position
-                if robot_px is not None:
-                    zone = get_zone(robot_px, zone_tracker.center_px)
-                    if zone is not None:
-                        zone_tracker.update_turn(zone, measured, direction)

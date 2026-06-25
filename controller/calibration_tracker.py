@@ -60,10 +60,6 @@ def save_calibration_to_config():
     with open(config_path, "w", encoding="utf-8") as f:
         f.write(text)
 
-    # Persist zone calibration alongside global config.
-    from controller.zone_calibration_tracker import zone_tracker
-    zone_tracker.save()
-
     return (new_values["PIXELS_PER_ROTATION"],
             new_values["DEGREES_PER_ROTATION_LEFT"],
             new_values["DEGREES_PER_ROTATION_RIGHT"])

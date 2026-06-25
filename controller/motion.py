@@ -12,10 +12,11 @@ from controller.navigation import (
     classify_zone, wall_approach_angle, cross_approach_angle,
     cross_trigger_radius, path_is_clear, obstacle_waypoint,
 )
+
 from controller.calibration_tracker import (
     calibration_pixels, calibration_angle_left, calibration_angle_right,
 )
-from controller.zone_calibration_tracker import zone_tracker
+
 from config import (
     ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX,
     WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT, CORNER_STAGE_DISTANCES_PX,
@@ -37,21 +38,15 @@ def distance_px(a, b):
 
 def px_to_rotations(drive_px, pos_px=None):
     """Convert pixels to motor rotations using zone calibration if possible."""
-    if pos_px is not None:
-        ratio = zone_tracker.get_px_per_rotation(pos_px)
-    else:
-        ratio = calibration_pixels.ratio
+    ratio = calibration_pixels.ratio
     return drive_px / ratio
 
 
 def angle_to_rotations(heading_error, pos_px=None):
     """Convert degrees to motor rotations using zone calibration if possible."""
     direction = "RIGHT" if heading_error > 0 else "LEFT"
-    if pos_px is not None:
-        ratio = zone_tracker.get_deg_per_rotation(pos_px, direction)
-    else:
-        tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
-        ratio = tracker.ratio
+    tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
+    ratio = tracker.ratio
     return abs(heading_error) / ratio * TURN_DAMPING
 
 

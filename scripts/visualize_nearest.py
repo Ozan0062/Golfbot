@@ -11,22 +11,22 @@ from vision.tracker import WorldState
 from controller.nearest import create_nodes_and_edges, find_nearest
 
 def draw_state(ax, world):
-    """Tegner det nuværende state og returnerer den beregnede rute."""
+    """Draws current state and return calculated route."""
     ax.clear()
     
-    # 1. Byg Graf og Beregn Nærmeste Mål
+    # 1. build graph and calc nearest target
     G = create_nodes_and_edges(world)
     target = find_nearest(world)
 
-    # 2. Opsætning af plottet
-    ax.set_title("Nearest / NetworkX - Dynamisk Simulering (Luk vinduet for at stoppe)")
+    # 2. plot setup
+    ax.set_title("Nearest / NetworkX - dynamic simulation (Close window to stop)")
     ax.set_xlim(-10, 190) # Field width + margin
     ax.set_ylim(130, -10) # Field height + margin (inverted Y)
     
-    # Tegn selve banens kanter (væggene)
-    ax.plot([0, 180, 180, 0, 0], [0, 0, 120, 120, 0], color="black", linewidth=5, zorder=1, label="Væg/Bane-kant")
+    # draw track edges (walls)
+    ax.plot([0, 180, 180, 0, 0], [0, 0, 120, 120, 0], color="black", linewidth=5, zorder=1, label="wall/track-edge")
     
-    # 3. Tegn noder
+    # 3. Draw nodes
     pos = nx.get_node_attributes(G, 'pos')
     
     color_map = {
@@ -53,21 +53,21 @@ def draw_state(ax, world):
         ax.text(data["pos"][0], data["pos"][1] - 4, node, fontsize=9, ha="center")
         
         if data["penalty"] > 0 and node != "cross":
-            ax.text(data["pos"][0], data["pos"][1] + 6, f"+{data['penalty']} straf", fontsize=8, color="red", ha="center")
+            ax.text(data["pos"][0], data["pos"][1] + 6, f"+{data['penalty']} penalty", fontsize=8, color="red", ha="center")
 
-    # Tegn krydset manuelt (da det ikke længere er en node)
+    # draw cross manualy (since its no longer a node)
     if world.cross:
         ax.scatter(world.cross[0], world.cross[1], c="purple", s=200, zorder=5, label="obstacle", edgecolors="black")
         ax.text(world.cross[0], world.cross[1] - 4, "cross", fontsize=9, ha="center")
 
-    # Tegn robottens retning/vinkel
+    # draw robot dir/angle
     if world.robot and world.robot_angle is not None:
         rx, ry = world.robot
         dx = 12 * math.cos(math.radians(world.robot_angle))
         dy = 12 * math.sin(math.radians(world.robot_angle))
         ax.arrow(rx, ry, dx, dy, head_width=3, head_length=4, fc='black', ec='black', zorder=6, width=0.5)
 
-    # 4. Tegn pilene i fortløbende rækkefølge
+    # 4. draw arrows in sequece
     prev_pos = pos.get("robot", None)
     pos_px_dict = nx.get_node_attributes(G, 'pos_px')
     prev_pos_px = pos_px_dict.get("robot", None)
@@ -84,7 +84,7 @@ def draw_state(ax, world):
                     xytext=prev_pos, textcoords='data',
                     arrowprops=dict(arrowstyle="->", color=arrow_color, alpha=0.9, lw=3, shrinkA=12, shrinkB=12))
                                     
-        # Hent den faktiske edge-vægt fra grafen
+        # get acutal edge weight from graph
         edge_weight = G["robot"][target_node_id]["weight"] if G.has_edge("robot", target_node_id) else 0.0
         
         mid_x = (prev_pos[0] + target_pos[0]) / 2
@@ -92,32 +92,32 @@ def draw_state(ax, world):
         ax.text(mid_x, mid_y, f"{edge_weight:.1f} rot", color="darkred", fontsize=8, fontweight="bold", 
                 ha="center", va="center", bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1))
 
-    # 5. Afsluttende grafik-indstillinger
+    # 5. final gfx setup
     ax.legend(loc="upper right")
     ax.grid(True, linestyle="--", alpha=0.5)
     
     return target
 
 def main():
-    # Definer vores test-bane
+    # define our test track
     world = WorldState(
-        robot=(20.0, 60.0), # Robot starter i venstre side
+        robot=(20.0, 60.0), # robot starts left side
         white_balls=[
-            (90.0, 30.0, "open"),   # Over krydset
-            (90.0, 90.0, "open"),   # Under krydset
-            (60.0, 60.0, "open"),   # Venstre for krydset
-            (130.0, 60.0, "open")   # Højre for krydset
+            (90.0, 30.0, "open"),   # above cross
+            (90.0, 90.0, "open"),   # under cross
+            (60.0, 60.0, "open"),   # left of cross
+            (130.0, 60.0, "open")   # right of cross
         ],
         white_wall_balls=[
-            (10.0, 60.0, "wall"),   # Venstre væg
-            (170.0, 60.0, "wall")   # Højre væg
+            (10.0, 60.0, "wall"),   # left wall
+            (170.0, 60.0, "wall")   # right wall
         ],
         white_corner_balls=[
-            (10.0, 10.0, "corner"),   # Øverste venstre hjørne
-            (170.0, 110.0, "corner")  # Nederste højre hjørne
+            (10.0, 10.0, "corner"),   # top left corner
+            (170.0, 110.0, "corner")  # bottom right corner
         ],
         ob=(40.0, 40.0, "open"),
-        cross=(90.0, 60.0) # Krydset placeret midt på banen!
+        cross=(90.0, 60.0) # cross placed middle of track!
     )
 
     from config import WARPED_WIDTH, WARPED_HEIGHT, FIELD_WIDTH_CM, FIELD_HEIGHT_CM
@@ -130,7 +130,7 @@ def main():
             return (px[0], px[1], cm_coord[2])
         return (px[0], px[1])
 
-    # Generer de falske YOLO pixel-koordinater så de matcher nearest.py's forventninger
+    # gen fake yolo px coords to match nearest.py expecations
     world.robot_px = fake_px(world.robot)
     world.cross_px = fake_px(world.cross)
     world.ob_px = fake_px(world.ob)
@@ -138,60 +138,60 @@ def main():
     world.white_wall_balls_px = [fake_px(b) for b in world.white_wall_balls]
     world.white_corner_balls_px = [fake_px(b) for b in world.white_corner_balls]
 
-    # --- Start Simulationen ---
-    plt.ion() # Slå interaktiv mode til, så plottet opdaterer uden at vi lukker vinduet
+    # --- start sim ---
+    plt.ion() # enable interactiv mode so plot updates without closing window
     fig, ax = plt.subplots(figsize=(10, 7))
     
     step_count = 1
     while True:
-        # Tegn scenen og udregn
+        # draw scene and calc
         target = draw_state(ax, world)
         
         fig.canvas.draw()
         fig.canvas.flush_events()
         
         if not target:
-            print("Alle bolde er samlet op! Simulering færdig.")
-            ax.set_title("Simulering færdig - Alle bolde opsamlet!")
+            print("All balls colected! Sim done.")
+            ax.set_title("Sim done - All balls collected!")
             fig.canvas.draw()
             break
             
-        print("Klar til næste træk! Klik i vinduet (eller tryk på en tast) for at køre frem...")
-        ax.set_title("Klik i vinduet (eller tryk på en tast) for at tage næste bold!")
+        print("Ready for next move! click window (or press key) to move fwd...")
+        ax.set_title("click window (or press key) to take next ball!")
         fig.canvas.draw()
         
-        # Vent på at brugeren trykker før koden fortsætter
+        # wait for user press before code continous
         plt.waitforbuttonpress()
             
-        print(f"--- Kører til bold #{step_count}: {target['id']} ---")
+        print(f"--- moving to ball #{step_count}: {target['id']} ---")
         
-        # Simuler at robotten kører hen til bolden
+        # simulate robot driving to ball
         pos_cm = target.get("pos", target.get("pos_cm"))
         pos_px = target.get("pos_px")
         
-        # Opdater robottens vinkel før vi flytter dens position
+        # update robot angle before moving its pos
         if world.robot and pos_cm:
             dx = pos_cm[0] - world.robot[0]
             dy = pos_cm[1] - world.robot[1]
             world.robot_angle = math.degrees(math.atan2(dy, dx))
             
-        world.robot = pos_cm # Flyt robot
+        world.robot = pos_cm # move bot
         world.robot_px = pos_px
         
-        # Saml bolden op (fjern den fra arrays)
+        # pick up ball (remove from arrays)
         if target["id"] == "goal":
-            print("Mål nået! Simulering færdig.")
-            ax.set_title("Simulering færdig - Mål nået!")
+            print("Target reached! Sim done.")
+            ax.set_title("Sim done - target reached!")
             fig.canvas.draw()
             break
         elif target.get("type") == "staging":
-            print(f"  -> Staging point nået: {target['id']}")
-            # Vi sletter ikke bolden, da vi kun er på et staging point
+            print(f"  -> staging point reached: {target['id']}")
+            # we dont delete ball since we are just at a staging point
         elif target["id"] == "ob":
             world.ob = None
             world.ob_px = None
         else:
-            # Slet bolden der matcher positionen
+            # delete ball matching pos
             world.white_balls = [b for b in world.white_balls if (b[0], b[1]) != pos_cm]
             world.white_balls_px = [b for b in world.white_balls_px if (b[0], b[1]) != pos_px]
             
@@ -203,8 +203,8 @@ def main():
             
         step_count += 1
 
-    plt.ioff() # Sluk interaktiv mode
-    plt.show() # Hold det sidste frame åbent
+    plt.ioff() # disable interactive mode
+    plt.show() # keep last frame open
 
 if __name__ == "__main__":
     main()

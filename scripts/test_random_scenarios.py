@@ -140,7 +140,6 @@ def run_simulation(world, ax=None, fig=None):
     return total_weight
 
 def main():
-    print(f"Starting {TEST_RUNS} test scenarios with {WHITE_BALLS_COUNT} random white balls + 1 orange...\n")
     weights = []
     
     if VISUALIZE:

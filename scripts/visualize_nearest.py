@@ -55,7 +55,7 @@ def draw_state(ax, world):
         if data["penalty"] > 0 and node != "cross":
             ax.text(data["pos"][0], data["pos"][1] + 6, f"+{data['penalty']} penalty", fontsize=8, color="red", ha="center")
 
-    # draw cross manualy (since its no longer a node)
+    # draw cross manually (since its no longer a node)
     if world.cross:
         ax.scatter(world.cross[0], world.cross[1], c="purple", s=200, zorder=5, label="obstacle", edgecolors="black")
         ax.text(world.cross[0], world.cross[1] - 4, "cross", fontsize=9, ha="center")
@@ -67,7 +67,7 @@ def draw_state(ax, world):
         dy = 12 * math.sin(math.radians(world.robot_angle))
         ax.arrow(rx, ry, dx, dy, head_width=3, head_length=4, fc='black', ec='black', zorder=6, width=0.5)
 
-    # 4. draw arrows in sequece
+    # 4. draw arrows in sequence
     prev_pos = pos.get("robot", None)
     pos_px_dict = nx.get_node_attributes(G, 'pos_px')
     prev_pos_px = pos_px_dict.get("robot", None)
@@ -84,7 +84,7 @@ def draw_state(ax, world):
                     xytext=prev_pos, textcoords='data',
                     arrowprops=dict(arrowstyle="->", color=arrow_color, alpha=0.9, lw=3, shrinkA=12, shrinkB=12))
                                     
-        # get acutal edge weight from graph
+        # get actual edge weight from graph
         edge_weight = G["robot"][target_node_id]["weight"] if G.has_edge("robot", target_node_id) else 0.0
         
         mid_x = (prev_pos[0] + target_pos[0]) / 2
@@ -139,7 +139,7 @@ def main():
     world.white_corner_balls_px = [fake_px(b) for b in world.white_corner_balls]
 
     # --- start sim ---
-    plt.ion() # enable interactiv mode so plot updates without closing window
+    plt.ion() # enable interactive mode so plot updates without closing window
     fig, ax = plt.subplots(figsize=(10, 7))
     
     step_count = 1
@@ -151,7 +151,7 @@ def main():
         fig.canvas.flush_events()
         
         if not target:
-            print("All balls colected! Sim done.")
+            print("All balls collected! Sim done.")
             ax.set_title("Sim done - All balls collected!")
             fig.canvas.draw()
             break
@@ -160,7 +160,7 @@ def main():
         ax.set_title("click window (or press key) to take next ball!")
         fig.canvas.draw()
         
-        # wait for user press before code continous
+        # wait for user press before code continues
         plt.waitforbuttonpress()
             
         print(f"--- moving to ball #{step_count}: {target['id']} ---")

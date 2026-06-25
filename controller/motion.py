@@ -1,17 +1,6 @@
 """
-motion.py — movement maths and the low-level Driver for the state machine.
-
-Keeps the "how to move" details out of state_machine.py:
-  * unit conversions (pixels <-> motor rotations, angles -> rotations)
-  * staging-waypoint geometry for wall/corner/goal approaches
-  * the Driver: issues motor commands, records calibration, invalidates the pose
-  * drive_toward(): the single "turn to face a point, else drive toward it" step
-    used by every navigating state (AVOID, APPROACH, DRIVE_GOAL).
-
-The warp canvas is anisotropic (900/170 != 600/124.5 px-per-cm), so a bearing
-taken straight from pixels is distorted with heading. Distances stay in pixels
-(that's what the drive calibration is in), but bearings are taken in cm via
-px_to_cm so they agree with the cm-frame pose.angle.
+Convert pixels and angles into motor rotations.
+Also contains the Driver class that sends commands to the robot.
 """
 
 import math
@@ -26,6 +15,7 @@ from controller.navigation import (
 from controller.calibration_tracker import (
     calibration_pixels, calibration_angle_left, calibration_angle_right,
 )
+from controller.zone_calibration_tracker import zone_tracker
 from config import (
     ALIGN_THRESHOLD_DEG, MIN_TURN_ROTATIONS, TURN_DAMPING, MAX_DRIVE_PX,
     WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT, CORNER_STAGE_DISTANCES_PX,
@@ -45,13 +35,24 @@ def distance_px(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def px_to_rotations(drive_px):
-    return drive_px / calibration_pixels.ratio
+def px_to_rotations(drive_px, pos_px=None):
+    """Convert pixels to motor rotations using zone calibration if possible."""
+    if pos_px is not None:
+        ratio = zone_tracker.get_px_per_rotation(pos_px)
+    else:
+        ratio = calibration_pixels.ratio
+    return drive_px / ratio
 
 
-def angle_to_rotations(heading_error):
-    tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
-    return abs(heading_error) / tracker.ratio * TURN_DAMPING
+def angle_to_rotations(heading_error, pos_px=None):
+    """Convert degrees to motor rotations using zone calibration if possible."""
+    direction = "RIGHT" if heading_error > 0 else "LEFT"
+    if pos_px is not None:
+        ratio = zone_tracker.get_deg_per_rotation(pos_px, direction)
+    else:
+        tracker = calibration_angle_right if heading_error > 0 else calibration_angle_left
+        ratio = tracker.ratio
+    return abs(heading_error) / ratio * TURN_DAMPING
 
 
 # --- Staging geometry --------------------------------------------------------
@@ -78,13 +79,7 @@ def corner_approach_waypoints(robot_px, ball_px, approach_angle_deg,
 # --- Route-cost simulation (TSP edge weight) ---------------------------------
 
 def _approach_waypoints(start_px, target_px):
-    """
-    Final-approach waypoints for one ball, mirroring the wall/corner staging the
-    state machine plans in _begin_staged_approach.
-
-      open field    -> drive straight in              -> [target]
-      wall / corner -> staged approach, then the ball -> [stage_far, stage_near, target]
-    """
+    """Get the final approach waypoints based on where the ball is."""
     zone, walls = classify_zone(target_px, WALL_MARGIN_PX, WARPED_WIDTH, WARPED_HEIGHT)
     if zone in ("wall", "corner"):
         angle = wall_approach_angle(walls)
@@ -135,12 +130,12 @@ def get_price(start_px, target_px, *, cross_px=None, cross_size_px=None, start_a
 
     for wp in waypoints:
         # Drive this leg.
-        total_rotations += px_to_rotations(distance_px(prev_px, wp))
+        total_rotations += px_to_rotations(distance_px(prev_px, wp), pos_px=prev_px)
 
         # Turn onto this leg. Bearing in cm so the warp doesn't distort it.
         desired = angle_to_target(px_to_cm(prev_px), px_to_cm(wp))
         if heading is not None and abs(angle_error(heading, desired)) > ALIGN_THRESHOLD_DEG:
-            total_rotations += angle_to_rotations(angle_error(heading, desired))
+            total_rotations += angle_to_rotations(angle_error(heading, desired), pos_px=prev_px)
         heading = desired
         prev_px = wp
 
@@ -150,10 +145,7 @@ def get_price(start_px, target_px, *, cross_px=None, cross_size_px=None, start_a
 # --- Driver ------------------------------------------------------------------
 
 class Driver:
-    """
-    Owns the actual motor calls. Every move records a calibration sample and
-    invalidates the pose cache (so the FSM waits for the robot to settle).
-    """
+    """Helper class to send motor commands and update calibration."""
 
     def __init__(self, cal, pose_cache):
         self._cal  = cal
@@ -190,7 +182,7 @@ class Driver:
             pose.angle, angle_to_target(px_to_cm(pose.px), px_to_cm(target_px))
         )
         if abs(heading_error) > ALIGN_THRESHOLD_DEG:
-            rotations = angle_to_rotations(heading_error)
+            rotations = angle_to_rotations(heading_error, pos_px=pose.px)
             if rotations >= MIN_TURN_ROTATIONS:
                 direction = Command.RIGHT if heading_error > 0 else Command.LEFT
                 log.debug("turn %s %.1f deg -> %.2f rot", direction.name, abs(heading_error), rotations)
@@ -199,5 +191,5 @@ class Driver:
 
         drive_px = min(dist - arrive_radius, MAX_DRIVE_PX)
         log.debug("drive %.0f px", drive_px)
-        self.drive(pose, px_to_rotations(drive_px))
+        self.drive(pose, px_to_rotations(drive_px, pos_px=pose.px))
         return Command.FORWARD, False

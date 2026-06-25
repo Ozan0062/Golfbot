@@ -1,5 +1,5 @@
 """
-field.py — detect field corners and warp the field to a top-down view.
+field.py - detect field corners and warp the field to a top-down view.
 
 Standalone live test (detect corners, press 'w' to warp):
     python -m scripts.field_detect

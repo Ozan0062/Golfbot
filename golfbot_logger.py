@@ -1,25 +1,6 @@
 """
-golfbot_logger.py — centralised logging for GolfBot.
-
-Usage
------
-from golfbot_logger import get_logger
-
-log = get_logger(__name__)          # one line per file
-log.info("State: SEEK")
-log.debug("World dict: %s", world)
-log.warning("Robot pose lost")
-log.error("TCP send failed: %s", e)
-
-Log levels (least → most severe):
-  DEBUG    fine-grained detail (vision pipeline, cm values, …)
-  INFO     normal milestones   (state transitions, ball locked, …)
-  WARNING  recoverable issues  (pose lost, detection dropped, …)
-  ERROR    failures            (TCP error, motor fault, …)
-  CRITICAL unrecoverable       (no camera, no field model, …)
-
-By default the root level is INFO.  Pass LOG_LEVEL=DEBUG as an env var
-(or call setup_logging(level="DEBUG")) to get verbose output.
+Logging setup for the project.
+Prints colors to terminal and saves a log file.
 """
 
 from __future__ import annotations
@@ -32,7 +13,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-# ── Default configuration ─────────────────────────────────────────────────────
+# --- Default configuration ---
 
 DEFAULT_LEVEL   = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_DIR         = Path(__file__).parent / "logs"
@@ -53,12 +34,12 @@ _COLOURS = {
 _SETUP_DONE = False
 
 
-# ── Formatters ────────────────────────────────────────────────────────────────
+# --- Formatters ---
 
 class ColourFormatter(logging.Formatter):
     """Adds ANSI colour to the level name in console output."""
 
-    FMT = "%(asctime)s  %(levelname)-8s  %(name)s — %(message)s"
+    FMT = "%(asctime)s  %(levelname)-8s  %(name)s - %(message)s"
     DATEFMT = "%H:%M:%S"
 
     def format(self, record: logging.LogRecord) -> str:
@@ -69,12 +50,12 @@ class ColourFormatter(logging.Formatter):
 
 
 _PLAIN_FMT = logging.Formatter(
-    fmt     = "%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+    fmt     = "%(asctime)s  %(levelname)-8s  %(name)s - %(message)s",
     datefmt = "%Y-%m-%d %H:%M:%S",
 )
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# --- Public API ---
 
 def setup_logging(
     level:       str  = DEFAULT_LEVEL,
@@ -82,16 +63,7 @@ def setup_logging(
     log_dir:     Path = LOG_DIR,
     colour:      bool = True,
 ) -> None:
-    """
-    Call once at program start (main.py already does this automatically).
-
-    Parameters
-    ----------
-    level       : "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"
-    log_to_file : write a rotating log file under <log_dir>/
-    log_dir     : directory for log files (created if missing)
-    colour      : coloured console output (disable if piping to a file)
-    """
+    """Call once at program start to setup log file and console output."""
     global _SETUP_DONE
     if _SETUP_DONE:
         return
@@ -103,7 +75,7 @@ def setup_logging(
     ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(level)
     ch.setFormatter(ColourFormatter(
-        fmt="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+        fmt="%(asctime)s  %(levelname)-8s  %(name)s - %(message)s",
         datefmt="%H:%M:%S",
     ) if colour else _PLAIN_FMT)
     root.addHandler(ch)
@@ -122,7 +94,7 @@ def setup_logging(
         fh.setFormatter(_PLAIN_FMT)
         root.addHandler(fh)
         # Log the path so the user knows where to look
-        logging.getLogger(__name__).info("Log file → %s", log_path.resolve())
+        logging.getLogger(__name__).info("Log file -> %s", log_path.resolve())
 
     # Silence noisy third-party libraries
     for noisy in ("ultralytics", "onnxruntime"):
@@ -132,12 +104,5 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Return a module-level logger.  Call setup_logging() first (main.py does it).
-
-    Example
-    -------
-    log = get_logger(__name__)
-    log.info("SEEK → ALIGN, target at (%.1f, %.1f) cm", x, y)
-    """
+    """Get a logger for the current file."""
     return logging.getLogger(name)

@@ -1,0 +1,41 @@
+{
+  "center_px": [
+    450,
+    300
+  ],
+  "zones": {
+    "0": {
+      "px_per_rot": 63.31,
+      "deg_per_rot_left": 31.77,
+      "deg_per_rot_right": 29.95,
+      "samples_drive": 0,
+      "samples_turn_left": 0,
+      "samples_turn_right": 0
+    },
+    "1": {
+      "px_per_rot": 63.31,
+      "deg_per_rot_left": 31.77,
+      "deg_per_rot_right": 29.95,
+      "samples_drive": 0,
+      "samples_turn_left": 0,
+      "samples_turn_right": 0
+    },
+    "2": {
+      "px_per_rot": 63.31,
+      "deg_per_rot_left": 31.77,
+      "deg_per_rot_right": 29.95,
+      "samples_drive": 0,
+      "samples_turn_left": 0,
+      "samples_turn_right": 0
+    },
+    "3": {
+      "px_per_rot": 63.31,
+      "deg_per_rot_left": 31.77,
+      "deg_per_rot_right": 29.95,
+      "samples_drive": 0,
+      "samples_turn_left": 0,
+      "samples_turn_right": 0
+    }
+  },
+  "last_updated": "2026-06-25T08:24:55.621334"
+}

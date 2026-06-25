@@ -185,7 +185,7 @@ def main():
             fig.canvas.draw()
             break
         elif target.get("type") == "staging":
-            print(f"  → Staging point nået: {target['id']}")
+            print(f"  -> Staging point nået: {target['id']}")
             # Vi sletter ikke bolden, da vi kun er på et staging point
         elif target["id"] == "ob":
             world.ob = None

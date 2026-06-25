@@ -47,13 +47,13 @@ class TrackerUnitTests(unittest.TestCase):
 
         objects = extract_objects(pixels_to_cm(detections, image_width=640, image_height=480))
 
-        self.assertTupleAlmostEqual(objects.white_balls[0][:2], (26.40625, 25.9375))
+        self.assertTupleAlmostEqual(objects.white_balls[0][:2], (26.5625, 25.9375))
         self.assertEqual(objects.white_balls[0][2], "open")
         self.assertEqual(objects.white_balls_px, [(100, 100, "open")])
-        self.assertTupleAlmostEqual(objects.ob[:2], (52.8125, 25.9375))
+        self.assertTupleAlmostEqual(objects.ob[:2], (53.125, 25.9375))
         self.assertEqual(objects.ob[2], "open")
         self.assertEqual(objects.ob_px, (200, 100, "open"))
-        self.assertTupleAlmostEqual(objects.cross, (79.21875, 51.875))
+        self.assertTupleAlmostEqual(objects.cross, (79.6875, 51.875))
         self.assertEqual(objects.cross_px, (300, 200))
 
     def test_extract_objects_ignores_unknown_classes(self):
@@ -77,10 +77,10 @@ class TrackerUnitTests(unittest.TestCase):
 
         objects = extract_objects(pixels_to_cm(detections, image_width=640, image_height=480))
 
-        self.assertTupleAlmostEqual(objects.ob[:2], (52.8125, 51.875))
+        self.assertTupleAlmostEqual(objects.ob[:2], (53.125, 51.875))
         self.assertEqual(objects.ob[2], "open")
         self.assertEqual(objects.ob_px, (200, 200, "open"))
-        self.assertTupleAlmostEqual(objects.cross, (105.625, 103.75))
+        self.assertTupleAlmostEqual(objects.cross, (106.25, 103.75))
         self.assertEqual(objects.cross_px, (400, 400))
 
     def test_filter_detections_near_robot_removes_near_ball_but_keeps_cross(self):

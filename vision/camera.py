@@ -1,5 +1,5 @@
 """
-camera.py — capture frames from the overhead USB camera.
+camera.py - capture frames from the overhead USB camera.
 
 Standalone capture tool (save training images):
     python -m scripts.camera_capture
@@ -21,6 +21,8 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        cap.set(cv2.CAP_PROP_FPS, 30)
         ret, _ = cap.read()
         if cap.isOpened() and ret:
             if i != index:
@@ -33,13 +35,8 @@ def open_camera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT):
 
 class CameraStream:
     """
-    Background thread that continuously drains the camera buffer.
-
-    The thread calls cap.read() in a tight loop and stores the result.
-    Because it never stops reading, the buffer never builds up — even
-    during long blocking EV3 moves.
-
-    Call latest() to get the most recent frame.  No flushing needed.
+    Thread that constantly grabs camera frames.
+    This prevents old frames from piling up while the robot is driving.
     """
 
     def __init__(self, cap):

@@ -7,8 +7,10 @@ import unittest
 from unittest.mock import patch
 
 from controller.commands import Command
+from controller.navigation import path_is_clear
 from controller.route_manager import RouteTarget
 from controller.state_machine import GolfBotController, State
+from config import CROSS_CLEARANCE_PX
 from test.world_state_helpers import world_state
 
 
@@ -55,6 +57,29 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
         self.assertIs(command, Command.STOP)
         self.assertIs(controller.state, State.APPROACH)
 
+    def test_seek_skips_ball_too_close_to_robot_and_picks_next(self):
+        controller = GolfBotController()
+        world = world_state(
+            robot=(20.0, 20.0),
+            robot_px=(100, 100),
+            robot_angle=0.0,
+            white_balls=[(21.0, 20.0, "open"), (80.0, 20.0, "open")],
+            white_balls_px=[(105, 100, "open"), (440, 100, "open")],
+        )
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.SEEK)
+        self.assertIsNone(controller._locked_target)
+        self.assertEqual(controller._skipped_target_px, [(105, 100)])
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.APPROACH)
+        self.assertEqual(controller._locked_target.px[:2], (440, 100))
+
     def test_ball_at_the_cross_is_collected_with_staged_approach(self):
         controller = self._controller_with_target(
             RouteTarget(cm=(85.0, 75.0), px=(470, 320), dist_px=430.0)
@@ -73,6 +98,31 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
         self.assertIs(controller.state, State.AVOID)
         self.assertTrue(controller._is_wall_ball)
         self.assertIsNotNone(controller._corner_approach_angle)
+
+    def test_wall_ball_near_cross_adjusts_final_stage_to_keep_approach_clear(self):
+        target_px = (450, 540)
+        cross_px = (450, 300)
+        controller = self._controller_with_target(
+            RouteTarget(cm=(85.0, 112.0), px=target_px, dist_px=250.0)
+        )
+        world = world_state(
+            robot=(120.0, 90.0),
+            robot_px=(650, 430),
+            robot_angle=180.0,
+            cross_px=cross_px,
+        )
+
+        with patch("controller.state_machine.find_nearest", return_value={"pos_px": target_px}):
+            command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.AVOID)
+        self.assertTrue(controller._is_wall_ball)
+        self.assertNotEqual(controller._avoid_target, target_px)
+        clear, _ = path_is_clear(
+            controller._avoid_target, target_px, [cross_px], CROSS_CLEARANCE_PX
+        )
+        self.assertTrue(clear)
 
     def test_state_machine_stops_when_robot_pose_is_missing(self):
         controller = GolfBotController()
@@ -148,6 +198,27 @@ class StateMachineSeekAvoidTests(unittest.TestCase):
 
         self.assertIs(command, Command.FORWARD)
         self.assertIs(controller.state, State.AVOID)
+
+    def test_approach_replans_instead_of_driving_through_cross(self):
+        target_px = (450, 540)
+        cross_px = (450, 300)
+        controller = GolfBotController()
+        controller.state = State.APPROACH
+        controller._locked_target = RouteTarget(cm=(85.0, 112.0), px=target_px, dist_px=150.0)
+        controller._is_wall_ball = True
+        controller._driver.drive_toward = lambda pose, wp, arrive: (Command.FORWARD, False)
+        world = world_state(
+            robot=(85.0, 81.0),
+            robot_px=(450, 390),
+            robot_angle=90.0,
+            cross_px=cross_px,
+        )
+
+        command = controller.update(world)
+
+        self.assertIs(command, Command.STOP)
+        self.assertIs(controller.state, State.AVOID)
+        self.assertTrue(controller._is_wall_ball)
 
 
 if __name__ == "__main__":

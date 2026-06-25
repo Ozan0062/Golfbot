@@ -1,8 +1,8 @@
 """
-drive_calibration.py — math helpers for drive/turn calibration.
+Math helpers for drive/turn calibration.
 
 Called after every movement to refine the estimates in calibration_tracker.py.
-(Camera lens calibration is separate — see vision/lens_calibration.py.)
+(Camera lens calibration is separate - see vision/lens_calibration.py.)
 """
 
 import math

@@ -1,10 +1,10 @@
 """
-lens_calibration_tool.py — CLI for camera lens calibration.
+lens_calibration_tool.py - CLI for camera lens calibration.
 
 Run from the repo root:
-    python -m scripts.lens_calibration_tool capture    — take checkerboard photos
-    python -m scripts.lens_calibration_tool calibrate  — compute calibration
-    python -m scripts.lens_calibration_tool test       — show undistorted live feed
+    python -m scripts.lens_calibration_tool capture    - take checkerboard photos
+    python -m scripts.lens_calibration_tool calibrate  - compute calibration
+    python -m scripts.lens_calibration_tool test       - show undistorted live feed
 """
 
 import sys
@@ -19,9 +19,9 @@ from vision.lens_calibration import (
 def main():
     if len(sys.argv) < 2 or sys.argv[1] not in ("capture", "calibrate", "test"):
         print("Usage:")
-        print("  python -m scripts.lens_calibration_tool capture    — take checkerboard photos")
-        print("  python -m scripts.lens_calibration_tool calibrate  — compute calibration")
-        print("  python -m scripts.lens_calibration_tool test       — show undistorted live feed")
+        print("  python -m scripts.lens_calibration_tool capture    - take checkerboard photos")
+        print("  python -m scripts.lens_calibration_tool calibrate  - compute calibration")
+        print("  python -m scripts.lens_calibration_tool test       - show undistorted live feed")
         sys.exit(1)
 
     cmd = sys.argv[1]

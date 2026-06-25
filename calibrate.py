@@ -1,5 +1,5 @@
 """
-calibrate.py — standalone drive/turn calibration tool.
+calibrate.py - standalone drive/turn calibration tool.
 
 Run this before main.py to get fresh calibration values. The script drives
 the robot forward, turns left, then turns right, measures each move via the
@@ -96,7 +96,7 @@ def main():
     log.info("Driving forward %.1f rot...", CAL_DRIVE_ROT)
     start_px, _, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
     if start_px is None:
-        log.warning("No pose before drive — aborting.")
+        log.warning("No pose before drive - aborting.")
         ok = False
     else:
         robot.drive(CAL_DRIVE_ROT)
@@ -105,9 +105,9 @@ def main():
         if end_px is not None:
             measured = measure_pixels_per_rotation(start_px, end_px, CAL_DRIVE_ROT)
             calibration_pixels.update(measured)
-            log.info("Drive → %.2f px/rot", calibration_pixels.ratio)
+            log.info("Drive -> %.2f px/rot", calibration_pixels.ratio)
         else:
-            log.warning("No pose after drive — skipping drive result.")
+            log.warning("No pose after drive - skipping drive result.")
             ok = False
 
     # --- Turn left ---
@@ -115,7 +115,7 @@ def main():
         log.info("Turning left %.1f rot...", CAL_TURN_ROT)
         _, start_angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
         if start_angle is None:
-            log.warning("No pose before left turn — aborting.")
+            log.warning("No pose before left turn - aborting.")
             ok = False
         else:
             robot.turn(CAL_TURN_ROT, "LEFT")
@@ -124,16 +124,16 @@ def main():
             if end_angle is not None:
                 measured = measure_degrees_per_rotation(start_angle, end_angle, CAL_TURN_ROT)
                 calibration_angle_left.update(measured)
-                log.info("Turn L → %.2f deg/rot", calibration_angle_left.ratio)
+                log.info("Turn L -> %.2f deg/rot", calibration_angle_left.ratio)
             else:
-                log.warning("No pose after left turn — skipping.")
+                log.warning("No pose after left turn - skipping.")
 
     # --- Turn right ---
     if ok:
         log.info("Turning right %.1f rot...", CAL_TURN_ROT)
         _, start_angle, last_corners = _get_pose(stream, undist_maps, field_model, aruco_detector, last_corners)
         if start_angle is None:
-            log.warning("No pose before right turn — aborting.")
+            log.warning("No pose before right turn - aborting.")
             ok = False
         else:
             robot.turn(CAL_TURN_ROT, "RIGHT")
@@ -142,16 +142,16 @@ def main():
             if end_angle is not None:
                 measured = measure_degrees_per_rotation(start_angle, end_angle, CAL_TURN_ROT)
                 calibration_angle_right.update(measured)
-                log.info("Turn R → %.2f deg/rot", calibration_angle_right.ratio)
+                log.info("Turn R -> %.2f deg/rot", calibration_angle_right.ratio)
             else:
-                log.warning("No pose after right turn — skipping.")
+                log.warning("No pose after right turn - skipping.")
 
     # Save to config.py so main.py picks them up.
     if ok:
         px, deg_l, deg_r = save_calibration_to_config()
-        log.info("Saved to config — drive %.2f px/rot, L %.2f / R %.2f deg/rot", px, deg_l, deg_r)
+        log.info("Saved to config - drive %.2f px/rot, L %.2f / R %.2f deg/rot", px, deg_l, deg_r)
     else:
-        log.warning("Calibration incomplete — config.py not updated.")
+        log.warning("Calibration incomplete - config.py not updated.")
 
     stream.stop()
     cv2.destroyAllWindows()

@@ -51,6 +51,20 @@ class NearestUnitTests(unittest.TestCase):
         target = find_nearest(world)
         self.assertIsNotNone(target)
         self.assertTrue(target["id"].startswith("wb_"))
+
+    def test_find_nearest_can_ignore_a_bad_detection(self):
+        world = world_state(
+            robot=(20.0, 20.0),
+            robot_px=(100, 100),
+            robot_angle=0.0,
+            white_balls=[(21.0, 20.0, "open"), (80.0, 20.0, "open")],
+            white_balls_px=[(105, 100, "open"), (440, 100, "open")],
+        )
+
+        target = find_nearest(world, ignored_px=[(105, 100)])
+
+        self.assertIsNotNone(target)
+        self.assertEqual(target["pos_px"][:2], (440, 100))
         
     def test_find_nearest_returns_orange_when_no_whites(self):
         world = world_state(

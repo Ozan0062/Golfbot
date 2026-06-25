@@ -1,5 +1,5 @@
 """
-aruco_test.py — live ArUco robot-pose detection (and regenerate the marker).
+aruco_test.py - live ArUco robot-pose detection (and regenerate the marker).
 
 Run:  python -m scripts.aruco_test
 Press ESC to quit.

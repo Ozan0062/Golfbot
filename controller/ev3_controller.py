@@ -4,15 +4,15 @@ ev3_controller.py.
 Sends string commands over TCP to ev3_server.py running on the brick.
 
 Commands the brick must handle (ev3_server.py):
-    FORWARD  <rot>   — drive forward <rot> motor rotations, reply "DONE"
-    BACKWARD <rot>   — drive backward <rot> motor rotations, reply "DONE"
-    LEFT     <rot>   — turn left <rot> motor rotations, reply "DONE"
-    RIGHT    <rot>   — turn right <rot> motor rotations, reply "DONE"
-    STOP             — stop all drive motors (fire-and-forget)
-    COLLECT          — run claw to pick up ball (blocking on brick), reply "DONE"
-    RELEASE          — open gate to release ball (blocking on brick), reply "DONE"
-    GATE_OPEN        — open gate (blocking on brick), reply "DONE"
-    GATE_CLOSE       — close gate (blocking on brick), reply "DONE"
+    FORWARD  <rot>   - drive forward <rot> motor rotations, reply "DONE"
+    BACKWARD <rot>   - drive backward <rot> motor rotations, reply "DONE"
+    LEFT     <rot>   - turn left <rot> motor rotations, reply "DONE"
+    RIGHT    <rot>   - turn right <rot> motor rotations, reply "DONE"
+    STOP             - stop all drive motors (fire-and-forget)
+    COLLECT          - run claw to pick up ball (blocking on brick), reply "DONE"
+    RELEASE          - open gate to release ball (blocking on brick), reply "DONE"
+    GATE_OPEN        - open gate (blocking on brick), reply "DONE"
+    GATE_CLOSE       - close gate (blocking on brick), reply "DONE"
 """
 
 import socket
@@ -55,7 +55,7 @@ def _send_recv(command: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Movement  (all blocking — wait for brick to finish)
+# Movement  (all blocking - wait for brick to finish)
 # ---------------------------------------------------------------------------
 
 def drive(rotations: float):

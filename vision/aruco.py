@@ -1,5 +1,5 @@
 """
-aruco.py — detect robot position and heading via its ArUco marker.
+aruco.py - detect robot position and heading via its ArUco marker.
 
 Standalone live test (also regenerates the printable marker):
     python -m scripts.aruco_test
@@ -91,5 +91,5 @@ def generate_marker(marker_id=0, size=200, filename="aruco_marker.png"):
     bordered = cv2.copyMakeBorder(marker, 40, 40, 40, 40,
                                    cv2.BORDER_CONSTANT, value=255)
     cv2.imwrite(filename, bordered)
-    print(f"Saved marker ID {marker_id} to {filename} — print this and stick it on the robot")
+    print(f"Saved marker ID {marker_id} to {filename} - print this and stick it on the robot")
     return bordered

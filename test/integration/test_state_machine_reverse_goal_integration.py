@@ -8,10 +8,7 @@ from unittest.mock import patch
 
 from controller.commands import Command
 from controller.state_machine import GolfBotController, State
-from config import (
-    GOAL_HEADING_MAX_CORRECTIONS, GOAL_LANE_MAX_REJECTIONS,
-    GOAL_RELEASE_MARKER_PX,
-)
+from config import GOAL_POSITION_CM, MARKER_TO_CLAW_CM
 from test.world_state_helpers import world_state
 
 
@@ -70,8 +67,9 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         controller = GolfBotController()
         controller.state = State.DRIVE_GOAL
         controller._goal_waypoints = []
-        controller._driver.drive = lambda pose, rotations: calls.append(rotations)
-        world = world_state(robot=(100.0, 60.0), robot_px=(500, 300), robot_angle=0.0)
+        controller._goal_approach_angle = 180.0
+        controller._driver.drive_toward = lambda pose, px, arrive: (Command.FORWARD, False)
+        world = world_state(robot=(100.0, 60.0), robot_px=(500, 300), robot_angle=180.0)
 
         command = controller.update(world)
 
@@ -84,6 +82,7 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         controller = GolfBotController()
         controller.state = State.DRIVE_GOAL
         controller._goal_waypoints = []
+        controller._goal_approach_angle = 180.0
         controller._driver.turn = lambda pose, rotations, direction: calls.append((rotations, direction))
         world = world_state(robot=(100.0, 60.0), robot_px=(500, 300), robot_angle=270.0)
 
@@ -132,10 +131,12 @@ class StateMachineReverseGoalTests(unittest.TestCase):
         controller = GolfBotController()
         controller.state = State.DRIVE_GOAL
         controller._goal_waypoints = []
+        controller._goal_approach_angle = 180.0
+        controller._driver.drive_toward = lambda pose, px, arrive: (Command.STOP, True)
         world = world_state(
-            robot=(GOAL_RELEASE_MARKER_PX[0] * 169.0 / 900, 60.0),
-            robot_px=GOAL_RELEASE_MARKER_PX,
-            robot_angle=0.0,
+            robot=(GOAL_POSITION_CM[0] + MARKER_TO_CLAW_CM, GOAL_POSITION_CM[1]),
+            robot_px=(50, 300),
+            robot_angle=180.0,
         )
 
         command = controller.update(world)

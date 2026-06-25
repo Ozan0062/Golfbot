@@ -101,9 +101,9 @@ class RouteManagerIntegrationTests(unittest.TestCase):
 
     def test_route_manager_uses_first_nearest_path_step_as_target(self):
         manager = RouteManager()
-        path = [{"pos_cm": (40.0, 20.0), "pos_px": (220, 100), "type": "open"}]
+        target_step = {"pos_cm": (40.0, 20.0), "pos_px": (220, 100), "type": "open"}
 
-        target = manager.get_target_nearest(path, robot_px=(100, 100), world=world_state())
+        target = manager.get_target_nearest(target_step, robot_px=(100, 100), world=world_state())
 
         self.assertEqual(target.cm, (40.0, 20.0))
         self.assertEqual(target.px, (220, 100))

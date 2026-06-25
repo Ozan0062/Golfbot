@@ -441,14 +441,13 @@ class GolfBotController:
         self._transition(State.SEEK)
         return Command.STOP
 
-    # --- State: APPROACH -----------------------------------------------------
     # Turn to face the ball and drive toward it.
-    # Make sure we're pointed perfectly at it before grabbing.
+    # Make sure were pointed perfectly at it before grabbing.
 
     def _approach(self, pose, world) -> Command:
         self.approach_calls +=1
         
-        if self.approach_calls == 5:
+        if self.approach_calls == 5: # Makes sure
             self._locked_target = None
             self._transition(State.SEEK)
             return
